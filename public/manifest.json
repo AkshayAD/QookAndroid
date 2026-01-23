@@ -1,0 +1,26 @@
+{
+    "name": "QookCommander",
+    "short_name": "Qook",
+    "description": "AI-powered home cook management and meal planning.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#f97316",
+    "icons": [
+        {
+            "src": "/QookCommander-home-cook-management-app-logo.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        },
+        {
+            "src": "/QookCommander-home-cook-management-app-logo.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/QookCommander-home-cook-management-app-logo.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

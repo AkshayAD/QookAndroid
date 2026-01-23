@@ -1,0 +1,5 @@
+{
+  "name": "QookCommander AI",
+  "description": "A smart meal planning application for managing your home cook. It generates non-repeating weekly menus based on detailed dietary preferences, creates grocery lists, and allows for granular regeneration of meals.",
+  "requestFramePermissions": []
+}

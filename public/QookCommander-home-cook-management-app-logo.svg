@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 130">
+  <defs>
+    <style>
+      .text-orange { fill: #F97316; font-family: 'Arial Rounded MT Bold', 'Nunito', 'Varela Round', sans-serif; font-weight: 800; }
+      .text-dark { fill: #1F2937; font-family: 'Impact', 'Oswald', 'Arial Narrow', sans-serif; font-weight: 600; }
+      .shape-orange { fill: #F97316; }
+    </style>
+  </defs>
+
+  <g transform="translate(10, 20)">
+    
+    <!-- CUSTOM Q CONSTRUCTION (High Fidelity) -->
+    <g transform="translate(0, 5)">
+        <!-- Q Ring (Thicker, slightly wider) -->
+        <path class="shape-orange" fill-rule="evenodd" 
+              d="M45,15 C68,15 85,32 85,50 C85,68 68,85 45,85 C22,85 5,68 5,50 C5,32 22,15 45,15 Z M45,30 C56,30 65,39 65,50 C65,61 56,70 45,70 C34,70 25,61 25,50 C25,39 34,30 45,30 Z" />
+        
+        <!-- Q Tail (The "Pan Handle") -->
+        <!-- Starts from the side, goes horizontal, tips down -->
+        <path class="shape-orange" d="M80,68 L100,68 C105,68 108,72 105,78 C102,84 95,84 95,84 L80,78 Z" />
+
+        <!-- Chef Hat (Detailed 3-Puff) -->
+        <!-- White negative space -->
+        <path fill="#ffffff" d="M30,52 L30,45 C28,45 25,40 28,35 C30,30 38,28 45,32 C52,28 60,30 62,35 C65,40 62,45 60,45 L60,52 L52,50 L45,52 L38,50 Z" />
+    </g>
+
+    <!-- "ook" Text -->
+    <!-- Tightly tracked, rounded -->
+    <text x="110" y="85" font-size="75" class="text-orange" letter-spacing="-3">ook</text>
+
+    <!-- Cloche Lid Icon (Over "ook") -->
+    <!-- Solid Fill Dome, slightly flatter -->
+    <path class="shape-orange" d="M130,28 Q180,-12 230,28 Z" />
+    
+    <!-- Handle (Ball) on top -->
+    <circle cx="180" cy="-2" r="8" class="shape-orange" />
+
+    <!-- "COMMANDER" Text -->
+    <!-- Tall and Condensed -->
+    <g transform="translate(250, 85) scale(0.85, 1.3)">
+        <text x="0" y="0" font-size="58" class="text-dark" letter-spacing="1">COMMANDER</text>
+    </g>
+
+    <!-- Underline -->
+    <!-- Starts under 'k', goes to end -->
+    <rect x="250" y="95" width="370" height="7" class="shape-orange" />
+  </g>
+</svg>
