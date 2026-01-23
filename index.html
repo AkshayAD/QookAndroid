@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>QookCommander - AI Home Cook Management App & Meal Planner</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <meta name="description"
+    content="QookCommander is the ultimate AI home cook management app. Generate personalized weekly meal plans, smart grocery lists, and recipes in seconds. Save time and reduce food waste." />
+  <meta name="keywords"
+    content="meal planner, home cook management, AI recipes, Qook.in, Qook, grocery list maker, kitchen assistant, food waste reduction" />
+  <meta name="geo.region" content="IN" />
+  <meta name="geo.placename" content="India" />
+
+  <!-- OpenGraph / Social Sharing (Facebook, WhatsApp, LinkedIn, etc.) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://qook.in/" />
+  <meta property="og:site_name" content="Qook" />
+  <meta property="og:title" content="Qook - Master Your Kitchen" />
+  <meta property="og:description"
+    content="Your personal meal planner. Get personalized weekly meal plans and organized grocery lists instantly." />
+  <meta property="og:image" content="https://qook.in/og-preview.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Qook - Your personal meal planner" />
+  <meta property="og:locale" content="en_IN" />
+
+  <!-- Twitter Card (also used by WhatsApp as fallback) -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Qook - Master Your Kitchen" />
+  <meta name="twitter:description"
+    content="Your personal meal planner. Get personalized weekly meal plans and organized grocery lists instantly." />
+  <meta name="twitter:image" content="https://qook.in/og-preview.png" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/png" href="/Site header logo.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "QookCommander",
+    "applicationCategory": "LifestyleApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "description": "AI-powered meal planning and home cook management application.",
+    "screenshot": "https://qook.in/screenshot-planner.png"
+  }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+      /* Native app feel: disable selection and tap highlight */
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Allow selection in inputs */
+    input, textarea, [contenteditable] {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* iOS Safe Areas */
+    .safe-area-inset-bottom {
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+
+    .safe-area-inset-top {
+      padding-top: env(safe-area-inset-top, 0);
+    }
+
+    /* Dynamic viewport height for iOS */
+    .min-h-dvh {
+      min-height: 100dvh;
+      min-height: 100vh;
+    }
+
+    .h-dvh {
+      height: 100dvh;
+      height: 100vh;
+    }
+
+    /* Touch scrolling */
+    .touch-scroll {
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+
+    /* Prevent body scroll when modal open */
+    body.modal-open {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Ensure minimum touch target size */
+    .touch-target {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Markdown Styles */
+    .markdown-body ul {
+      list-style-type: disc;
+      padding-left: 1.5em;
+      margin-bottom: 1em;
+    }
+
+    .markdown-body ol {
+      list-style-type: decimal;
+      padding-left: 1.5em;
+      margin-bottom: 1em;
+    }
+
+    .markdown-body strong {
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .markdown-body p {
+      margin-bottom: 0.5em;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+
+</html>
