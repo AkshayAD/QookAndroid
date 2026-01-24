@@ -30,9 +30,9 @@ async function callAiProxy<T>(
     payload: any,
     userApiKey?: string
 ): Promise<T> {
-    // Create AbortController for client-side timeout (90 seconds)
+    // Create AbortController for client-side timeout (150 seconds)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    const timeoutId = setTimeout(() => controller.abort(), 150000);
 
     try {
         const response = await fetch(`${getApiUrl()}/api/ai-proxy`, {
