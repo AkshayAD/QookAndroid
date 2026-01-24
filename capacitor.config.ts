@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
     appId: 'in.qook.app',
-    appName: 'Qook Commander',
+    appName: 'Qook',
     webDir: 'dist',
     android: {
         allowMixedContent: false,

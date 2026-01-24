@@ -40,14 +40,37 @@ const NameLocationStep: React.FC<StepProps> = ({ data, updateData, isRerun }) =>
         updateData({ country: code });
     };
 
+    const validatePhoneNumber = (phone: string): { valid: boolean; error: string } => {
+        const cleaned = phone.replace(/\D/g, '');
+        const hasCountryCode = phone.startsWith('+');
+
+        // Empty is valid (optional field)
+        if (!phone.trim()) {
+            return { valid: true, error: '' };
+        }
+
+        // Case 1: Exactly 10 digits (local format like 9876543210)
+        if (cleaned.length === 10 && !hasCountryCode) {
+            return { valid: true, error: '' };
+        }
+
+        // Case 2: 11 digits starting with 0 (e.g., 09876543210)
+        if (cleaned.length === 11 && cleaned.startsWith('0')) {
+            return { valid: true, error: '' };
+        }
+
+        // Case 3: Country code + 10 digits (e.g., +91 9876543210 = 12 digits)
+        if (hasCountryCode && cleaned.length >= 11 && cleaned.length <= 14) {
+            return { valid: true, error: '' };
+        }
+
+        return { valid: false, error: 'Enter 10-digit number or add country code (e.g., +91)' };
+    };
+
     const handlePhoneChange = (value: string) => {
         updateData({ phone: value });
-        const cleaned = value.replace(/\D/g, '');
-        if (value && cleaned.length > 0 && cleaned.length < 10) {
-            setPhoneError('Phone number must be at least 10 digits');
-        } else {
-            setPhoneError('');
-        }
+        const result = validatePhoneNumber(value);
+        setPhoneError(result.error);
     };
 
     const handleReferralChange = async (value: string) => {
