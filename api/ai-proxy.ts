@@ -1092,7 +1092,7 @@ async function executeTranslateContent(ai: GoogleGenAI, payload: any) {
         `;
 
     const response = await ai.models.generateContent({
-        model: "gemini-2.0-flash-lite-preview-02-05",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
         config: {
             responseMimeType: "application/json",
