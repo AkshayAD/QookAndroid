@@ -26,12 +26,12 @@ const config: CapacitorConfig = {
             androidScaleType: 'CENTER_CROP',
             showSpinner: false,
             splashFullScreen: true,
-            splashImmersive: true
+            splashImmersive: false  // CHANGED: was true, caused status bar to be hidden/overlaid
         },
         StatusBar: {
-            style: 'DARK',
+            style: 'LIGHT',          // LIGHT = dark icons on light background
             backgroundColor: '#ffffff',
-            overlaysWebView: false // Set to false so app content doesn't go behind status bar
+            overlaysWebView: false   // Content renders BELOW status bar
         },
         Keyboard: {
             resize: 'body' as const,

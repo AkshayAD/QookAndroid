@@ -43,12 +43,15 @@ export const initAndroidApp = async (): Promise<void> => {
     if (!isAndroid()) return;
 
     try {
-        // Set status bar style
-        // Set status bar style - dark icons on white background (non-overlay mode)
-        // This ensures content doesn't render behind the status bar
-        await StatusBar.setStyle({ style: Style.Light }); // Light = dark icons on light background
-        await StatusBar.setBackgroundColor({ color: '#ffffff' });
-        await StatusBar.setOverlaysWebView({ overlay: false }); // IMPORTANT: false = content below status bar
+        // Status bar is configured natively in MainActivity.java for reliability
+        // These JS calls are backup/redundant but won't hurt
+        try {
+            await StatusBar.setStyle({ style: Style.Light }); // Light = dark icons
+            await StatusBar.setBackgroundColor({ color: '#ffffff' });
+            await StatusBar.setOverlaysWebView({ overlay: false });
+        } catch (e) {
+            console.log('[Android] StatusBar plugin not available:', e);
+        }
 
         // Hide splash screen after app is ready
         await SplashScreen.hide();
