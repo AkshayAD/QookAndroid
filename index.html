@@ -13,6 +13,10 @@
   <meta name="geo.region" content="IN" />
   <meta name="geo.placename" content="India" />
 
+  <!-- Android Status Bar Color -->
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
   <!-- OpenGraph / Social Sharing (Facebook, WhatsApp, LinkedIn, etc.) -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://qook.in/" />
@@ -56,6 +60,8 @@
     body {
       font-family: 'Inter', sans-serif;
       background-color: #f8fafc;
+      /* Android/iOS: Push content below status bar */
+      padding-top: env(safe-area-inset-top, 0);
       /* Native app feel: disable selection and tap highlight */
       user-select: none;
       -webkit-user-select: none;
@@ -63,7 +69,9 @@
     }
 
     /* Allow selection in inputs */
-    input, textarea, [contenteditable] {
+    input,
+    textarea,
+    [contenteditable] {
       user-select: text;
       -webkit-user-select: text;
     }
