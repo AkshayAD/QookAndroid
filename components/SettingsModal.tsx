@@ -452,7 +452,7 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                     {notificationSettings.enabled && (
                                         <>
                                             {/* Reminder Times */}
-                                            <div className="space-y-2 mb-4">
+                                            <div className="space-y-3 mb-4">
                                                 <div className="flex items-center justify-between text-sm">
                                                     <label className="flex items-center gap-2">
                                                         <input
@@ -463,7 +463,15 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                         />
                                                         <span>🍳 Breakfast</span>
                                                     </label>
-                                                    <span className="text-amber-600">{String(notificationSettings.breakfastTime.hour).padStart(2, '0')}:{String(notificationSettings.breakfastTime.minute).padStart(2, '0')}</span>
+                                                    <input
+                                                        type="time"
+                                                        value={`${String(notificationSettings.breakfastTime.hour).padStart(2, '0')}:${String(notificationSettings.breakfastTime.minute).padStart(2, '0')}`}
+                                                        onChange={(e) => {
+                                                            const [h, m] = e.target.value.split(':').map(Number);
+                                                            setNotificationSettings(prev => ({ ...prev, breakfastTime: { hour: h, minute: m } }));
+                                                        }}
+                                                        className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
+                                                    />
                                                 </div>
                                                 <div className="flex items-center justify-between text-sm">
                                                     <label className="flex items-center gap-2">
@@ -475,7 +483,15 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                         />
                                                         <span>🍲 Lunch</span>
                                                     </label>
-                                                    <span className="text-amber-600">{String(notificationSettings.lunchTime.hour).padStart(2, '0')}:{String(notificationSettings.lunchTime.minute).padStart(2, '0')}</span>
+                                                    <input
+                                                        type="time"
+                                                        value={`${String(notificationSettings.lunchTime.hour).padStart(2, '0')}:${String(notificationSettings.lunchTime.minute).padStart(2, '0')}`}
+                                                        onChange={(e) => {
+                                                            const [h, m] = e.target.value.split(':').map(Number);
+                                                            setNotificationSettings(prev => ({ ...prev, lunchTime: { hour: h, minute: m } }));
+                                                        }}
+                                                        className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
+                                                    />
                                                 </div>
                                                 <div className="flex items-center justify-between text-sm">
                                                     <label className="flex items-center gap-2">
@@ -487,7 +503,15 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                         />
                                                         <span>🍽️ Dinner</span>
                                                     </label>
-                                                    <span className="text-amber-600">{String(notificationSettings.dinnerTime.hour).padStart(2, '0')}:{String(notificationSettings.dinnerTime.minute).padStart(2, '0')}</span>
+                                                    <input
+                                                        type="time"
+                                                        value={`${String(notificationSettings.dinnerTime.hour).padStart(2, '0')}:${String(notificationSettings.dinnerTime.minute).padStart(2, '0')}`}
+                                                        onChange={(e) => {
+                                                            const [h, m] = e.target.value.split(':').map(Number);
+                                                            setNotificationSettings(prev => ({ ...prev, dinnerTime: { hour: h, minute: m } }));
+                                                        }}
+                                                        className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
+                                                    />
                                                 </div>
                                                 <div className="flex items-center justify-between text-sm">
                                                     <label className="flex items-center gap-2">
@@ -499,7 +523,7 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                         />
                                                         <span>📅 Weekly Plan Reminder</span>
                                                     </label>
-                                                    <span className="text-amber-600">Mon 9:00</span>
+                                                    <span className="text-amber-600 font-medium text-xs">Mon 9:00</span>
                                                 </div>
                                             </div>
 
