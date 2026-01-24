@@ -1,0 +1,657 @@
+﻿Initialized native services in: C:\Users\aksha\.gradle\native
+Initialized jansi services in: C:\Users\aksha\.gradle\native
+The client will now receive all logging from the daemon (pid: 17568). The daemon log file: C:\Users\aksha\.gradle\daemon\8.14.3\daemon-17568.out.log
+Starting 4th build in daemon [uptime: 1 mins 4.014 secs, performance: 100%, GC rate: 0.00/s, heap usage: 1% of 1.5 GiB]
+Using 12 worker leases.
+Now considering [D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android] as hierarchies to watch
+Watching the file system is configured to be enabled if available
+File system watching is active
+Starting Build
+Settings evaluated using settings file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\settings.gradle'.
+Projects loaded. Root project using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\build.gradle'.
+Included projects: [root project 'android', project ':app', project ':capacitor-android', project ':capacitor-app', project ':capacitor-browser', project ':capacitor-camera', project ':capacitor-cordova-android-plugins', project ':capacitor-filesystem', project ':capacitor-keyboard', project ':capacitor-local-notifications', project ':capacitor-network', project ':capacitor-preferences', project ':capacitor-share', project ':capacitor-splash-screen', project ':capacitor-status-bar']
+
+> Configure project :
+Evaluating root project 'android' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\build.gradle'.
+
+> Configure project :app
+Evaluating project ':app' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\build.gradle'.
+Using default execution profile
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-android
+Evaluating project ':capacitor-android' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-app
+Evaluating project ':capacitor-app' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-browser
+Evaluating project ':capacitor-browser' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-camera
+Evaluating project ':capacitor-camera' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-cordova-android-plugins
+Evaluating project ':capacitor-cordova-android-plugins' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\build.gradle'.
+Using default execution profile
+WARNING: Using flatDir should be avoided because it doesn't support any meta-data formats.
+
+> Configure project :capacitor-filesystem
+Evaluating project ':capacitor-filesystem' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\build.gradle'.
+Using default execution profile
+Build 3f996dff-f393-43a9-9a5f-17be73bc5e9f is started
+Using Kotlin Gradle Plugin gradle813 variant
+
+> Configure project :capacitor-keyboard
+Evaluating project ':capacitor-keyboard' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-local-notifications
+Evaluating project ':capacitor-local-notifications' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-network
+Evaluating project ':capacitor-network' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-preferences
+Evaluating project ':capacitor-preferences' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-share
+Evaluating project ':capacitor-share' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-splash-screen
+Evaluating project ':capacitor-splash-screen' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\build.gradle'.
+Using default execution profile
+
+> Configure project :capacitor-status-bar
+Evaluating project ':capacitor-status-bar' using build file 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\build.gradle'.
+Using default execution profile
+All projects evaluated.
+Task name matched 'assembleDebug'
+Selected primary task 'assembleDebug' from project :
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+Tasks to be executed: [task ':app:preBuild', task ':app:preDebugBuild', task ':app:mergeDebugNativeDebugMetadata', task ':app:javaPreCompileDebug', task ':capacitor-android:preBuild', task ':capacitor-android:preDebugBuild', task ':capacitor-android:writeDebugAarMetadata', task ':capacitor-app:preBuild', task ':capacitor-app:preDebugBuild', task ':capacitor-app:writeDebugAarMetadata', task ':capacitor-browser:preBuild', task ':capacitor-browser:preDebugBuild', task ':capacitor-browser:writeDebugAarMetadata', task ':capacitor-camera:preBuild', task ':capacitor-camera:preDebugBuild', task ':capacitor-camera:writeDebugAarMetadata', task ':capacitor-cordova-android-plugins:preBuild', task ':capacitor-cordova-android-plugins:preDebugBuild', task ':capacitor-cordova-android-plugins:writeDebugAarMetadata', task ':capacitor-filesystem:preBuild', task ':capacitor-filesystem:preDebugBuild', task ':capacitor-filesystem:writeDebugAarMetadata', task ':capacitor-keyboard:preBuild', task ':capacitor-keyboard:preDebugBuild', task ':capacitor-keyboard:writeDebugAarMetadata', task ':capacitor-local-notifications:preBuild', task ':capacitor-local-notifications:preDebugBuild', task ':capacitor-local-notifications:writeDebugAarMetadata', task ':capacitor-network:preBuild', task ':capacitor-network:preDebugBuild', task ':capacitor-network:writeDebugAarMetadata', task ':capacitor-preferences:preBuild', task ':capacitor-preferences:preDebugBuild', task ':capacitor-preferences:writeDebugAarMetadata', task ':capacitor-share:preBuild', task ':capacitor-share:preDebugBuild', task ':capacitor-share:writeDebugAarMetadata', task ':capacitor-splash-screen:preBuild', task ':capacitor-splash-screen:preDebugBuild', task ':capacitor-splash-screen:writeDebugAarMetadata', task ':capacitor-status-bar:preBuild', task ':capacitor-status-bar:preDebugBuild', task ':capacitor-status-bar:writeDebugAarMetadata', task ':app:checkDebugAarMetadata', task ':capacitor-android:processDebugNavigationResources', task ':capacitor-app:processDebugNavigationResources', task ':capacitor-browser:processDebugNavigationResources', task ':capacitor-camera:processDebugNavigationResources', task ':capacitor-cordova-android-plugins:processDebugNavigationResources', task ':capacitor-filesystem:processDebugNavigationResources', task ':capacitor-keyboard:processDebugNavigationResources', task ':capacitor-local-notifications:processDebugNavigationResources', task ':capacitor-network:processDebugNavigationResources', task ':capacitor-preferences:processDebugNavigationResources', task ':capacitor-share:processDebugNavigationResources', task ':capacitor-splash-screen:processDebugNavigationResources', task ':capacitor-status-bar:processDebugNavigationResources', task ':app:processDebugNavigationResources', task ':app:compileDebugNavigationResources', task ':app:generateDebugResValues', task ':app:processDebugGoogleServices', task ':capacitor-android:generateDebugResValues', task ':capacitor-android:generateDebugResources', task ':capacitor-android:packageDebugResources', task ':capacitor-app:generateDebugResValues', task ':capacitor-app:generateDebugResources', task ':capacitor-app:packageDebugResources', task ':capacitor-browser:generateDebugResValues', task ':capacitor-browser:generateDebugResources', task ':capacitor-browser:packageDebugResources', task ':capacitor-camera:generateDebugResValues', task ':capacitor-camera:generateDebugResources', task ':capacitor-camera:packageDebugResources', task ':capacitor-cordova-android-plugins:generateDebugResValues', task ':capacitor-cordova-android-plugins:generateDebugResources', task ':capacitor-cordova-android-plugins:packageDebugResources', task ':capacitor-filesystem:generateDebugResValues', task ':capacitor-filesystem:generateDebugResources', task ':capacitor-filesystem:packageDebugResources', task ':capacitor-keyboard:generateDebugResValues', task ':capacitor-keyboard:generateDebugResources', task ':capacitor-keyboard:packageDebugResources', task ':capacitor-local-notifications:generateDebugResValues', task ':capacitor-local-notifications:generateDebugResources', task ':capacitor-local-notifications:packageDebugResources', task ':capacitor-network:generateDebugResValues', task ':capacitor-network:generateDebugResources', task ':capacitor-network:packageDebugResources', task ':capacitor-preferences:generateDebugResValues', task ':capacitor-preferences:generateDebugResources', task ':capacitor-preferences:packageDebugResources', task ':capacitor-share:generateDebugResValues', task ':capacitor-share:generateDebugResources', task ':capacitor-share:packageDebugResources', task ':capacitor-splash-screen:generateDebugResValues', task ':capacitor-splash-screen:generateDebugResources', task ':capacitor-splash-screen:packageDebugResources', task ':capacitor-status-bar:generateDebugResValues', task ':capacitor-status-bar:generateDebugResources', task ':capacitor-status-bar:packageDebugResources', task ':app:mapDebugSourceSetPaths', task ':app:generateDebugResources', task ':app:mergeDebugResources', task ':app:packageDebugResources', task ':app:parseDebugLocalResources', task ':app:createDebugCompatibleScreenManifests', task ':app:extractDeepLinksDebug', task ':capacitor-android:extractDeepLinksDebug', task ':capacitor-android:processDebugManifest', task ':capacitor-app:extractDeepLinksDebug', task ':capacitor-app:processDebugManifest', task ':capacitor-browser:extractDeepLinksDebug', task ':capacitor-browser:processDebugManifest', task ':capacitor-camera:extractDeepLinksDebug', task ':capacitor-camera:processDebugManifest', task ':capacitor-cordova-android-plugins:extractDeepLinksDebug', task ':capacitor-cordova-android-plugins:processDebugManifest', task ':capacitor-filesystem:extractDeepLinksDebug', task ':capacitor-filesystem:processDebugManifest', task ':capacitor-keyboard:extractDeepLinksDebug', task ':capacitor-keyboard:processDebugManifest', task ':capacitor-local-notifications:extractDeepLinksDebug', task ':capacitor-local-notifications:processDebugManifest', task ':capacitor-network:extractDeepLinksDebug', task ':capacitor-network:processDebugManifest', task ':capacitor-preferences:extractDeepLinksDebug', task ':capacitor-preferences:processDebugManifest', task ':capacitor-share:extractDeepLinksDebug', task ':capacitor-share:processDebugManifest', task ':capacitor-splash-screen:extractDeepLinksDebug', task ':capacitor-splash-screen:processDebugManifest', task ':capacitor-status-bar:extractDeepLinksDebug', task ':capacitor-status-bar:processDebugManifest', task ':app:processDebugMainManifest', task ':app:processDebugManifest', task ':app:processDebugManifestForPackage', task ':capacitor-android:compileDebugLibraryResources', task ':capacitor-android:parseDebugLocalResources', task ':capacitor-android:generateDebugRFile', task ':capacitor-app:compileDebugLibraryResources', task ':capacitor-app:parseDebugLocalResources', task ':capacitor-app:generateDebugRFile', task ':capacitor-browser:compileDebugLibraryResources', task ':capacitor-browser:parseDebugLocalResources', task ':capacitor-browser:generateDebugRFile', task ':capacitor-camera:compileDebugLibraryResources', task ':capacitor-camera:parseDebugLocalResources', task ':capacitor-camera:generateDebugRFile', task ':capacitor-cordova-android-plugins:compileDebugLibraryResources', task ':capacitor-cordova-android-plugins:parseDebugLocalResources', task ':capacitor-cordova-android-plugins:generateDebugRFile', task ':capacitor-filesystem:compileDebugLibraryResources', task ':capacitor-filesystem:parseDebugLocalResources', task ':capacitor-filesystem:generateDebugRFile', task ':capacitor-keyboard:compileDebugLibraryResources', task ':capacitor-keyboard:parseDebugLocalResources', task ':capacitor-keyboard:generateDebugRFile', task ':capacitor-local-notifications:compileDebugLibraryResources', task ':capacitor-local-notifications:parseDebugLocalResources', task ':capacitor-local-notifications:generateDebugRFile', task ':capacitor-network:compileDebugLibraryResources', task ':capacitor-network:parseDebugLocalResources', task ':capacitor-network:generateDebugRFile', task ':capacitor-preferences:compileDebugLibraryResources', task ':capacitor-preferences:parseDebugLocalResources', task ':capacitor-preferences:generateDebugRFile', task ':capacitor-share:compileDebugLibraryResources', task ':capacitor-share:parseDebugLocalResources', task ':capacitor-share:generateDebugRFile', task ':capacitor-splash-screen:compileDebugLibraryResources', task ':capacitor-splash-screen:parseDebugLocalResources', task ':capacitor-splash-screen:generateDebugRFile', task ':capacitor-status-bar:compileDebugLibraryResources', task ':capacitor-status-bar:parseDebugLocalResources', task ':capacitor-status-bar:generateDebugRFile', task ':app:processDebugResources', task ':capacitor-android:javaPreCompileDebug', task ':capacitor-android:compileDebugJavaWithJavac', task ':capacitor-android:bundleLibCompileToJarDebug', task ':capacitor-app:javaPreCompileDebug', task ':capacitor-app:compileDebugJavaWithJavac', task ':capacitor-app:bundleLibCompileToJarDebug', task ':capacitor-browser:javaPreCompileDebug', task ':capacitor-browser:compileDebugJavaWithJavac', task ':capacitor-browser:bundleLibCompileToJarDebug', task ':capacitor-camera:javaPreCompileDebug', task ':capacitor-camera:compileDebugJavaWithJavac', task ':capacitor-camera:bundleLibCompileToJarDebug', task ':capacitor-cordova-android-plugins:javaPreCompileDebug', task ':capacitor-cordova-android-plugins:compileDebugJavaWithJavac', task ':capacitor-cordova-android-plugins:bundleLibCompileToJarDebug', task ':capacitor-filesystem:checkKotlinGradlePluginConfigurationErrors', task ':capacitor-filesystem:compileDebugKotlin', task ':capacitor-filesystem:javaPreCompileDebug', task ':capacitor-filesystem:compileDebugJavaWithJavac', task ':capacitor-filesystem:bundleLibCompileToJarDebug', task ':capacitor-keyboard:javaPreCompileDebug', task ':capacitor-keyboard:compileDebugJavaWithJavac', task ':capacitor-keyboard:bundleLibCompileToJarDebug', task ':capacitor-local-notifications:javaPreCompileDebug', task ':capacitor-local-notifications:compileDebugJavaWithJavac', task ':capacitor-local-notifications:bundleLibCompileToJarDebug', task ':capacitor-network:javaPreCompileDebug', task ':capacitor-network:compileDebugJavaWithJavac', task ':capacitor-network:bundleLibCompileToJarDebug', task ':capacitor-preferences:javaPreCompileDebug', task ':capacitor-preferences:compileDebugJavaWithJavac', task ':capacitor-preferences:bundleLibCompileToJarDebug', task ':capacitor-share:javaPreCompileDebug', task ':capacitor-share:compileDebugJavaWithJavac', task ':capacitor-share:bundleLibCompileToJarDebug', task ':capacitor-splash-screen:javaPreCompileDebug', task ':capacitor-splash-screen:compileDebugJavaWithJavac', task ':capacitor-splash-screen:bundleLibCompileToJarDebug', task ':capacitor-status-bar:javaPreCompileDebug', task ':capacitor-status-bar:compileDebugJavaWithJavac', task ':capacitor-status-bar:bundleLibCompileToJarDebug', task ':app:compileDebugJavaWithJavac', task ':app:mergeDebugShaders', task ':app:compileDebugShaders', task ':app:generateDebugAssets', task ':capacitor-android:mergeDebugShaders', task ':capacitor-android:compileDebugShaders', task ':capacitor-android:generateDebugAssets', task ':capacitor-android:mergeDebugAssets', task ':capacitor-app:mergeDebugShaders', task ':capacitor-app:compileDebugShaders', task ':capacitor-app:generateDebugAssets', task ':capacitor-app:mergeDebugAssets', task ':capacitor-browser:mergeDebugShaders', task ':capacitor-browser:compileDebugShaders', task ':capacitor-browser:generateDebugAssets', task ':capacitor-browser:mergeDebugAssets', task ':capacitor-camera:mergeDebugShaders', task ':capacitor-camera:compileDebugShaders', task ':capacitor-camera:generateDebugAssets', task ':capacitor-camera:mergeDebugAssets', task ':capacitor-cordova-android-plugins:mergeDebugShaders', task ':capacitor-cordova-android-plugins:compileDebugShaders', task ':capacitor-cordova-android-plugins:generateDebugAssets', task ':capacitor-cordova-android-plugins:mergeDebugAssets', task ':capacitor-filesystem:mergeDebugShaders', task ':capacitor-filesystem:compileDebugShaders', task ':capacitor-filesystem:generateDebugAssets', task ':capacitor-filesystem:mergeDebugAssets', task ':capacitor-keyboard:mergeDebugShaders', task ':capacitor-keyboard:compileDebugShaders', task ':capacitor-keyboard:generateDebugAssets', task ':capacitor-keyboard:mergeDebugAssets', task ':capacitor-local-notifications:mergeDebugShaders', task ':capacitor-local-notifications:compileDebugShaders', task ':capacitor-local-notifications:generateDebugAssets', task ':capacitor-local-notifications:mergeDebugAssets', task ':capacitor-network:mergeDebugShaders', task ':capacitor-network:compileDebugShaders', task ':capacitor-network:generateDebugAssets', task ':capacitor-network:mergeDebugAssets', task ':capacitor-preferences:mergeDebugShaders', task ':capacitor-preferences:compileDebugShaders', task ':capacitor-preferences:generateDebugAssets', task ':capacitor-preferences:mergeDebugAssets', task ':capacitor-share:mergeDebugShaders', task ':capacitor-share:compileDebugShaders', task ':capacitor-share:generateDebugAssets', task ':capacitor-share:mergeDebugAssets', task ':capacitor-splash-screen:mergeDebugShaders', task ':capacitor-splash-screen:compileDebugShaders', task ':capacitor-splash-screen:generateDebugAssets', task ':capacitor-splash-screen:mergeDebugAssets', task ':capacitor-status-bar:mergeDebugShaders', task ':capacitor-status-bar:compileDebugShaders', task ':capacitor-status-bar:generateDebugAssets', task ':capacitor-status-bar:mergeDebugAssets', task ':app:mergeDebugAssets', task ':app:compressDebugAssets', task ':capacitor-app:bundleLibRuntimeToJarDebug', task ':capacitor-browser:bundleLibRuntimeToJarDebug', task ':capacitor-camera:bundleLibRuntimeToJarDebug', task ':capacitor-filesystem:bundleLibRuntimeToJarDebug', task ':capacitor-keyboard:bundleLibRuntimeToJarDebug', task ':capacitor-local-notifications:bundleLibRuntimeToJarDebug', task ':capacitor-network:bundleLibRuntimeToJarDebug', task ':capacitor-preferences:bundleLibRuntimeToJarDebug', task ':capacitor-share:bundleLibRuntimeToJarDebug', task ':capacitor-splash-screen:bundleLibRuntimeToJarDebug', task ':capacitor-status-bar:bundleLibRuntimeToJarDebug', task ':capacitor-android:bundleLibRuntimeToJarDebug', task ':capacitor-cordova-android-plugins:bundleLibRuntimeToJarDebug', task ':app:desugarDebugFileDependencies', task ':app:dexBuilderDebug', task ':app:mergeDebugGlobalSynthetics', task ':app:processDebugJavaRes', task ':capacitor-android:processDebugJavaRes', task ':capacitor-app:processDebugJavaRes', task ':capacitor-browser:processDebugJavaRes', task ':capacitor-camera:processDebugJavaRes', task ':capacitor-cordova-android-plugins:processDebugJavaRes', task ':capacitor-filesystem:processDebugJavaRes', task ':capacitor-keyboard:processDebugJavaRes', task ':capacitor-local-notifications:processDebugJavaRes', task ':capacitor-network:processDebugJavaRes', task ':capacitor-preferences:processDebugJavaRes', task ':capacitor-share:processDebugJavaRes', task ':capacitor-splash-screen:processDebugJavaRes', task ':capacitor-status-bar:processDebugJavaRes', task ':app:mergeDebugJavaResource', task ':app:checkDebugDuplicateClasses', task ':app:mergeExtDexDebug', task ':capacitor-app:bundleLibRuntimeToDirDebug', task ':capacitor-browser:bundleLibRuntimeToDirDebug', task ':capacitor-camera:bundleLibRuntimeToDirDebug', task ':capacitor-filesystem:bundleLibRuntimeToDirDebug', task ':capacitor-keyboard:bundleLibRuntimeToDirDebug', task ':capacitor-local-notifications:bundleLibRuntimeToDirDebug', task ':capacitor-network:bundleLibRuntimeToDirDebug', task ':capacitor-preferences:bundleLibRuntimeToDirDebug', task ':capacitor-share:bundleLibRuntimeToDirDebug', task ':capacitor-splash-screen:bundleLibRuntimeToDirDebug', task ':capacitor-status-bar:bundleLibRuntimeToDirDebug', task ':capacitor-android:bundleLibRuntimeToDirDebug', task ':capacitor-cordova-android-plugins:bundleLibRuntimeToDirDebug', task ':app:mergeLibDexDebug', task ':app:mergeProjectDexDebug', task ':app:mergeDebugJniLibFolders', task ':capacitor-android:mergeDebugJniLibFolders', task ':capacitor-android:mergeDebugNativeLibs', task ':capacitor-android:copyDebugJniLibsProjectOnly', task ':capacitor-app:mergeDebugJniLibFolders', task ':capacitor-app:mergeDebugNativeLibs', task ':capacitor-app:copyDebugJniLibsProjectOnly', task ':capacitor-browser:mergeDebugJniLibFolders', task ':capacitor-browser:mergeDebugNativeLibs', task ':capacitor-browser:copyDebugJniLibsProjectOnly', task ':capacitor-camera:mergeDebugJniLibFolders', task ':capacitor-camera:mergeDebugNativeLibs', task ':capacitor-camera:copyDebugJniLibsProjectOnly', task ':capacitor-cordova-android-plugins:mergeDebugJniLibFolders', task ':capacitor-cordova-android-plugins:mergeDebugNativeLibs', task ':capacitor-cordova-android-plugins:copyDebugJniLibsProjectOnly', task ':capacitor-filesystem:mergeDebugJniLibFolders', task ':capacitor-filesystem:mergeDebugNativeLibs', task ':capacitor-filesystem:copyDebugJniLibsProjectOnly', task ':capacitor-keyboard:mergeDebugJniLibFolders', task ':capacitor-keyboard:mergeDebugNativeLibs', task ':capacitor-keyboard:copyDebugJniLibsProjectOnly', task ':capacitor-local-notifications:mergeDebugJniLibFolders', task ':capacitor-local-notifications:mergeDebugNativeLibs', task ':capacitor-local-notifications:copyDebugJniLibsProjectOnly', task ':capacitor-network:mergeDebugJniLibFolders', task ':capacitor-network:mergeDebugNativeLibs', task ':capacitor-network:copyDebugJniLibsProjectOnly', task ':capacitor-preferences:mergeDebugJniLibFolders', task ':capacitor-preferences:mergeDebugNativeLibs', task ':capacitor-preferences:copyDebugJniLibsProjectOnly', task ':capacitor-share:mergeDebugJniLibFolders', task ':capacitor-share:mergeDebugNativeLibs', task ':capacitor-share:copyDebugJniLibsProjectOnly', task ':capacitor-splash-screen:mergeDebugJniLibFolders', task ':capacitor-splash-screen:mergeDebugNativeLibs', task ':capacitor-splash-screen:copyDebugJniLibsProjectOnly', task ':capacitor-status-bar:mergeDebugJniLibFolders', task ':capacitor-status-bar:mergeDebugNativeLibs', task ':capacitor-status-bar:copyDebugJniLibsProjectOnly', task ':app:mergeDebugNativeLibs', task ':app:stripDebugDebugSymbols', task ':app:validateSigningDebug', task ':app:writeDebugAppMetadata', task ':app:writeDebugSigningConfigVersions', task ':app:packageDebug', task ':app:createDebugApkListingFileRedirect', task ':app:assembleDebug', task ':capacitor-android:checkDebugAarMetadata', task ':capacitor-android:stripDebugDebugSymbols', task ':capacitor-android:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-android:extractDebugAnnotations', task ':capacitor-android:extractDeepLinksForAarDebug', task ':capacitor-android:mergeDebugGeneratedProguardFiles', task ':capacitor-android:mergeDebugConsumerProguardFiles', task ':capacitor-android:prepareDebugArtProfile', task ':capacitor-android:prepareLintJarForPublish', task ':capacitor-android:mergeDebugJavaResource', task ':capacitor-android:syncDebugLibJars', task ':capacitor-android:bundleDebugAar', task ':capacitor-android:assembleDebug', task ':capacitor-app:checkDebugAarMetadata', task ':capacitor-app:stripDebugDebugSymbols', task ':capacitor-app:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-app:extractDebugAnnotations', task ':capacitor-app:extractDeepLinksForAarDebug', task ':capacitor-app:mergeDebugGeneratedProguardFiles', task ':capacitor-app:mergeDebugConsumerProguardFiles', task ':capacitor-app:prepareDebugArtProfile', task ':capacitor-app:prepareLintJarForPublish', task ':capacitor-app:mergeDebugJavaResource', task ':capacitor-app:syncDebugLibJars', task ':capacitor-app:bundleDebugAar', task ':capacitor-app:assembleDebug', task ':capacitor-browser:checkDebugAarMetadata', task ':capacitor-browser:stripDebugDebugSymbols', task ':capacitor-browser:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-browser:extractDebugAnnotations', task ':capacitor-browser:extractDeepLinksForAarDebug', task ':capacitor-browser:mergeDebugGeneratedProguardFiles', task ':capacitor-browser:mergeDebugConsumerProguardFiles', task ':capacitor-browser:prepareDebugArtProfile', task ':capacitor-browser:prepareLintJarForPublish', task ':capacitor-browser:mergeDebugJavaResource', task ':capacitor-browser:syncDebugLibJars', task ':capacitor-browser:bundleDebugAar', task ':capacitor-browser:assembleDebug', task ':capacitor-camera:checkDebugAarMetadata', task ':capacitor-camera:stripDebugDebugSymbols', task ':capacitor-camera:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-camera:extractDebugAnnotations', task ':capacitor-camera:extractDeepLinksForAarDebug', task ':capacitor-camera:mergeDebugGeneratedProguardFiles', task ':capacitor-camera:mergeDebugConsumerProguardFiles', task ':capacitor-camera:prepareDebugArtProfile', task ':capacitor-camera:prepareLintJarForPublish', task ':capacitor-camera:mergeDebugJavaResource', task ':capacitor-camera:syncDebugLibJars', task ':capacitor-camera:bundleDebugAar', task ':capacitor-camera:assembleDebug', task ':capacitor-cordova-android-plugins:checkDebugAarMetadata', task ':capacitor-cordova-android-plugins:stripDebugDebugSymbols', task ':capacitor-cordova-android-plugins:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-cordova-android-plugins:extractDebugAnnotations', task ':capacitor-cordova-android-plugins:extractDeepLinksForAarDebug', task ':capacitor-cordova-android-plugins:mergeDebugGeneratedProguardFiles', task ':capacitor-cordova-android-plugins:mergeDebugConsumerProguardFiles', task ':capacitor-cordova-android-plugins:prepareDebugArtProfile', task ':capacitor-cordova-android-plugins:prepareLintJarForPublish', task ':capacitor-cordova-android-plugins:mergeDebugJavaResource', task ':capacitor-cordova-android-plugins:syncDebugLibJars', task ':capacitor-cordova-android-plugins:bundleDebugAar', task ':capacitor-cordova-android-plugins:assembleDebug', task ':capacitor-filesystem:checkDebugAarMetadata', task ':capacitor-filesystem:stripDebugDebugSymbols', task ':capacitor-filesystem:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-filesystem:extractDebugAnnotations', task ':capacitor-filesystem:extractDeepLinksForAarDebug', task ':capacitor-filesystem:mergeDebugGeneratedProguardFiles', task ':capacitor-filesystem:mergeDebugConsumerProguardFiles', task ':capacitor-filesystem:prepareDebugArtProfile', task ':capacitor-filesystem:prepareLintJarForPublish', task ':capacitor-filesystem:mergeDebugJavaResource', task ':capacitor-filesystem:syncDebugLibJars', task ':capacitor-filesystem:bundleDebugAar', task ':capacitor-filesystem:assembleDebug', task ':capacitor-keyboard:checkDebugAarMetadata', task ':capacitor-keyboard:stripDebugDebugSymbols', task ':capacitor-keyboard:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-keyboard:extractDebugAnnotations', task ':capacitor-keyboard:extractDeepLinksForAarDebug', task ':capacitor-keyboard:mergeDebugGeneratedProguardFiles', task ':capacitor-keyboard:mergeDebugConsumerProguardFiles', task ':capacitor-keyboard:prepareDebugArtProfile', task ':capacitor-keyboard:prepareLintJarForPublish', task ':capacitor-keyboard:mergeDebugJavaResource', task ':capacitor-keyboard:syncDebugLibJars', task ':capacitor-keyboard:bundleDebugAar', task ':capacitor-keyboard:assembleDebug', task ':capacitor-local-notifications:checkDebugAarMetadata', task ':capacitor-local-notifications:stripDebugDebugSymbols', task ':capacitor-local-notifications:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-local-notifications:extractDebugAnnotations', task ':capacitor-local-notifications:extractDeepLinksForAarDebug', task ':capacitor-local-notifications:mergeDebugGeneratedProguardFiles', task ':capacitor-local-notifications:mergeDebugConsumerProguardFiles', task ':capacitor-local-notifications:prepareDebugArtProfile', task ':capacitor-local-notifications:prepareLintJarForPublish', task ':capacitor-local-notifications:mergeDebugJavaResource', task ':capacitor-local-notifications:syncDebugLibJars', task ':capacitor-local-notifications:bundleDebugAar', task ':capacitor-local-notifications:assembleDebug', task ':capacitor-network:checkDebugAarMetadata', task ':capacitor-network:stripDebugDebugSymbols', task ':capacitor-network:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-network:extractDebugAnnotations', task ':capacitor-network:extractDeepLinksForAarDebug', task ':capacitor-network:mergeDebugGeneratedProguardFiles', task ':capacitor-network:mergeDebugConsumerProguardFiles', task ':capacitor-network:prepareDebugArtProfile', task ':capacitor-network:prepareLintJarForPublish', task ':capacitor-network:mergeDebugJavaResource', task ':capacitor-network:syncDebugLibJars', task ':capacitor-network:bundleDebugAar', task ':capacitor-network:assembleDebug', task ':capacitor-preferences:checkDebugAarMetadata', task ':capacitor-preferences:stripDebugDebugSymbols', task ':capacitor-preferences:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-preferences:extractDebugAnnotations', task ':capacitor-preferences:extractDeepLinksForAarDebug', task ':capacitor-preferences:mergeDebugGeneratedProguardFiles', task ':capacitor-preferences:mergeDebugConsumerProguardFiles', task ':capacitor-preferences:prepareDebugArtProfile', task ':capacitor-preferences:prepareLintJarForPublish', task ':capacitor-preferences:mergeDebugJavaResource', task ':capacitor-preferences:syncDebugLibJars', task ':capacitor-preferences:bundleDebugAar', task ':capacitor-preferences:assembleDebug', task ':capacitor-share:checkDebugAarMetadata', task ':capacitor-share:stripDebugDebugSymbols', task ':capacitor-share:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-share:extractDebugAnnotations', task ':capacitor-share:extractDeepLinksForAarDebug', task ':capacitor-share:mergeDebugGeneratedProguardFiles', task ':capacitor-share:mergeDebugConsumerProguardFiles', task ':capacitor-share:prepareDebugArtProfile', task ':capacitor-share:prepareLintJarForPublish', task ':capacitor-share:mergeDebugJavaResource', task ':capacitor-share:syncDebugLibJars', task ':capacitor-share:bundleDebugAar', task ':capacitor-share:assembleDebug', task ':capacitor-splash-screen:checkDebugAarMetadata', task ':capacitor-splash-screen:stripDebugDebugSymbols', task ':capacitor-splash-screen:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-splash-screen:extractDebugAnnotations', task ':capacitor-splash-screen:extractDeepLinksForAarDebug', task ':capacitor-splash-screen:mergeDebugGeneratedProguardFiles', task ':capacitor-splash-screen:mergeDebugConsumerProguardFiles', task ':capacitor-splash-screen:prepareDebugArtProfile', task ':capacitor-splash-screen:prepareLintJarForPublish', task ':capacitor-splash-screen:mergeDebugJavaResource', task ':capacitor-splash-screen:syncDebugLibJars', task ':capacitor-splash-screen:bundleDebugAar', task ':capacitor-splash-screen:assembleDebug', task ':capacitor-status-bar:checkDebugAarMetadata', task ':capacitor-status-bar:stripDebugDebugSymbols', task ':capacitor-status-bar:copyDebugJniLibsProjectAndLocalJars', task ':capacitor-status-bar:extractDebugAnnotations', task ':capacitor-status-bar:extractDeepLinksForAarDebug', task ':capacitor-status-bar:mergeDebugGeneratedProguardFiles', task ':capacitor-status-bar:mergeDebugConsumerProguardFiles', task ':capacitor-status-bar:prepareDebugArtProfile', task ':capacitor-status-bar:prepareLintJarForPublish', task ':capacitor-status-bar:mergeDebugJavaResource', task ':capacitor-status-bar:syncDebugLibJars', task ':capacitor-status-bar:bundleDebugAar', task ':capacitor-status-bar:assembleDebug']
+Tasks that were excluded: []
+work action Parameters of IdentityTransform (Thread[#643,Execution worker Thread 2,5,main]) started.
+work action Parameters of DexingNoClasspathTransform (Thread[#643,Execution worker Thread 2,5,main]) started.
+work action Parameters of DexingOutputSplitTransform (Thread[#643,Execution worker Thread 2,5,main]) started.
+work action Parameters of ClassesDirToClassesTransform (Thread[#643,Execution worker Thread 2,5,main]) started.
+work action Parameters of DexingOutputSplitTransform (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :app:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:app:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :app:preBuild UP-TO-DATE
+Skipping task ':app:preBuild' as it has no actions.
+Resolve mutations for :app:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:app:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :app:preDebugBuild UP-TO-DATE
+Skipping task ':app:preDebugBuild' as it has no actions.
+Resolve mutations for :app:mergeDebugNativeDebugMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:app:mergeDebugNativeDebugMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+Skipping task ':app:mergeDebugNativeDebugMetadata' as it has no source files and no previous output files.
+Resolve mutations for :app:javaPreCompileDebug (Thread[#643,Execution worker Thread 2,5,main]) started.
+:app:javaPreCompileDebug (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :app:javaPreCompileDebug UP-TO-DATE
+Caching disabled for task ':app:javaPreCompileDebug' because:
+  Build cache is disabled
+Skipping task ':app:javaPreCompileDebug' as it is up-to-date.
+Resolve mutations for :capacitor-android:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-android:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-android:preBuild UP-TO-DATE
+Skipping task ':capacitor-android:preBuild' as it has no actions.
+Resolve mutations for :capacitor-android:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-android:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-android:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-android:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-android:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-android:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-android:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-android:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-android:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-android) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-app:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-app:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-app:preBuild UP-TO-DATE
+Skipping task ':capacitor-app:preBuild' as it has no actions.
+Resolve mutations for :capacitor-app:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-app:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-app:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-app:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-app:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-app:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-app:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-app:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-app:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-app) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-browser:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-browser:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-browser:preBuild UP-TO-DATE
+Skipping task ':capacitor-browser:preBuild' as it has no actions.
+Resolve mutations for :capacitor-browser:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-browser:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-browser:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-browser:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-browser:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-browser:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-browser:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-browser:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-browser:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-browser) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-camera:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-camera:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-camera:preBuild UP-TO-DATE
+Skipping task ':capacitor-camera:preBuild' as it has no actions.
+Resolve mutations for :capacitor-camera:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-camera:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-camera:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-camera:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-camera:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-camera:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-camera:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-camera:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-camera:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-camera) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-cordova-android-plugins:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-cordova-android-plugins:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:preBuild UP-TO-DATE
+Skipping task ':capacitor-cordova-android-plugins:preBuild' as it has no actions.
+Resolve mutations for :capacitor-cordova-android-plugins:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-cordova-android-plugins:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-cordova-android-plugins:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-cordova-android-plugins:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-cordova-android-plugins:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-cordova-android-plugins:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-cordova-android-plugins:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-cordova-android-plugins) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-filesystem:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-filesystem:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-filesystem:preBuild UP-TO-DATE
+Skipping task ':capacitor-filesystem:preBuild' as it has no actions.
+Resolve mutations for :capacitor-filesystem:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-filesystem:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-filesystem:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-filesystem:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-filesystem:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-filesystem:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-filesystem:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-filesystem:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-filesystem:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-filesystem) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-keyboard:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-keyboard:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-keyboard:preBuild UP-TO-DATE
+Skipping task ':capacitor-keyboard:preBuild' as it has no actions.
+Resolve mutations for :capacitor-keyboard:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-keyboard:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-keyboard:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-keyboard:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-keyboard:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-keyboard:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-keyboard:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-keyboard:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-keyboard:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-keyboard) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-local-notifications:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-local-notifications:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-local-notifications:preBuild UP-TO-DATE
+Skipping task ':capacitor-local-notifications:preBuild' as it has no actions.
+Resolve mutations for :capacitor-local-notifications:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-local-notifications:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-local-notifications:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-local-notifications:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-local-notifications:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-local-notifications:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-local-notifications:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-local-notifications:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-local-notifications:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-local-notifications) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-network:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-network:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-network:preBuild UP-TO-DATE
+Skipping task ':capacitor-network:preBuild' as it has no actions.
+Resolve mutations for :capacitor-network:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-network:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-network:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-network:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-network:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-network:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-network:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-network:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-network:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-network) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-preferences:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-preferences:preBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-preferences:preBuild UP-TO-DATE
+Skipping task ':capacitor-preferences:preBuild' as it has no actions.
+Resolve mutations for :capacitor-preferences:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-preferences:preDebugBuild (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-preferences:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-preferences:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-preferences:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+:capacitor-preferences:writeDebugAarMetadata (Thread[#643,Execution worker Thread 2,5,main]) started.
+
+> Task :capacitor-preferences:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-preferences:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-preferences:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-preferences) (Thread[#643,Execution worker Thread 2,5,main]) started.
+Resolve mutations for :capacitor-share:preBuild (Thread[#644,Execution worker Thread 3,5,main]) started.
+:capacitor-share:preBuild (Thread[#644,Execution worker Thread 3,5,main]) started.
+
+> Task :capacitor-share:preBuild UP-TO-DATE
+Skipping task ':capacitor-share:preBuild' as it has no actions.
+Resolve mutations for :capacitor-share:preDebugBuild (Thread[#644,Execution worker Thread 3,5,main]) started.
+:capacitor-share:preDebugBuild (Thread[#644,Execution worker Thread 3,5,main]) started.
+
+> Task :capacitor-share:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-share:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-share:writeDebugAarMetadata (Thread[#644,Execution worker Thread 3,5,main]) started.
+:capacitor-share:writeDebugAarMetadata (Thread[#644,Execution worker Thread 3,5,main]) started.
+
+> Task :capacitor-share:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-share:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-share:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-share) (Thread[#644,Execution worker Thread 3,5,main]) started.
+Resolve mutations for :capacitor-splash-screen:preBuild (Thread[#644,Execution worker Thread 3,5,main]) started.
+:capacitor-splash-screen:preBuild (Thread[#644,Execution worker Thread 3,5,main]) started.
+
+> Task :capacitor-splash-screen:preBuild UP-TO-DATE
+Skipping task ':capacitor-splash-screen:preBuild' as it has no actions.
+Resolve mutations for :capacitor-splash-screen:preDebugBuild (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-splash-screen:preDebugBuild (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-splash-screen:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-splash-screen:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-splash-screen:writeDebugAarMetadata (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-splash-screen:writeDebugAarMetadata (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-splash-screen:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-splash-screen:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-splash-screen:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-splash-screen) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-status-bar:preBuild (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-status-bar:preBuild (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-status-bar:preBuild UP-TO-DATE
+Skipping task ':capacitor-status-bar:preBuild' as it has no actions.
+Resolve mutations for :capacitor-status-bar:preDebugBuild (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-status-bar:preDebugBuild (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-status-bar:preDebugBuild UP-TO-DATE
+Skipping task ':capacitor-status-bar:preDebugBuild' as it has no actions.
+Resolve mutations for :capacitor-status-bar:writeDebugAarMetadata (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-status-bar:writeDebugAarMetadata (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-status-bar:writeDebugAarMetadata UP-TO-DATE
+Caching disabled for task ':capacitor-status-bar:writeDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':capacitor-status-bar:writeDebugAarMetadata' as it is up-to-date.
+work action resolve aar-metadata.properties (project :capacitor-status-bar) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :app:checkDebugAarMetadata (Thread[#651,Execution worker Thread 10,5,main]) started.
+:app:checkDebugAarMetadata (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+Caching disabled for task ':app:checkDebugAarMetadata' because:
+  Build cache is disabled
+  Caching has been disabled for the task
+Skipping task ':app:checkDebugAarMetadata' as it is up-to-date.
+Resolve mutations for :capacitor-android:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-android:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-android:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-android:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-android:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-android) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-app:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-app:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-app:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-app:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-app:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-app) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-browser:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-browser:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-browser:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-browser:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-browser:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-browser) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-camera:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-camera:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-camera:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-camera:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-camera:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-camera) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-cordova-android-plugins:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-cordova-android-plugins:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-cordova-android-plugins:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-cordova-android-plugins:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-cordova-android-plugins:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-cordova-android-plugins) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-filesystem:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-filesystem:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-filesystem:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-filesystem:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-filesystem:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-filesystem) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-keyboard:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+:capacitor-keyboard:processDebugNavigationResources (Thread[#651,Execution worker Thread 10,5,main]) started.
+
+> Task :capacitor-keyboard:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-keyboard:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-keyboard:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-keyboard) (Thread[#651,Execution worker Thread 10,5,main]) started.
+Resolve mutations for :capacitor-local-notifications:processDebugNavigationResources (Thread[#649,Execution worker Thread 8,5,main]) started.
+:capacitor-local-notifications:processDebugNavigationResources (Thread[#649,Execution worker Thread 8,5,main]) started.
+
+> Task :capacitor-local-notifications:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-local-notifications:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-local-notifications:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-local-notifications) (Thread[#649,Execution worker Thread 8,5,main]) started.
+Resolve mutations for :capacitor-network:processDebugNavigationResources (Thread[#649,Execution worker Thread 8,5,main]) started.
+:capacitor-network:processDebugNavigationResources (Thread[#649,Execution worker Thread 8,5,main]) started.
+
+> Task :capacitor-network:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-network:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-network:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-network) (Thread[#649,Execution worker Thread 8,5,main]) started.
+Resolve mutations for :capacitor-preferences:processDebugNavigationResources (Thread[#649,Execution worker Thread 8,5,main]) started.
+:capacitor-preferences:processDebugNavigationResources (Thread[#649,Execution worker Thread 8,5,main]) started.
+
+> Task :capacitor-preferences:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-preferences:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-preferences:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-preferences) (Thread[#649,Execution worker Thread 8,5,main]) started.
+Resolve mutations for :capacitor-share:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+:capacitor-share:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+
+> Task :capacitor-share:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-share:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-share:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-share) (Thread[#652,Execution worker Thread 11,5,main]) started.
+Resolve mutations for :capacitor-splash-screen:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+:capacitor-splash-screen:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+
+> Task :capacitor-splash-screen:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-splash-screen:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-splash-screen:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-splash-screen) (Thread[#652,Execution worker Thread 11,5,main]) started.
+Resolve mutations for :capacitor-status-bar:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+:capacitor-status-bar:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+
+> Task :capacitor-status-bar:processDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':capacitor-status-bar:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':capacitor-status-bar:processDebugNavigationResources' as it is up-to-date.
+work action resolve debug (project :capacitor-status-bar) (Thread[#652,Execution worker Thread 11,5,main]) started.
+Resolve mutations for :app:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+:app:processDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+
+> Task :app:processDebugNavigationResources UP-TO-DATE
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\app\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\browser\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\camera\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\filesystem\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\keyboard\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\local-notifications\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\network\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\preferences\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\share\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\splash-screen\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\status-bar\android\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\node_modules\@capacitor\android\capacitor\libs', not found
+file or directory 'D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\capacitor-cordova-android-plugins\src\main\libs', not found
+Caching disabled for task ':app:processDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':app:processDebugNavigationResources' as it is up-to-date.
+Resolve mutations for :app:compileDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+:app:compileDebugNavigationResources (Thread[#652,Execution worker Thread 11,5,main]) started.
+.\gradlew.bat : 
+At line:1 char:53
++ ... \Android Studio\jbr"; 
+.\gradlew.bat assembleDebug --info 
+2>&1 | Out-F ...
++                           ~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpec 
+   ified: (:String) [], RemoteExcept  
+  ion
+    + FullyQualifiedErrorId : NativeC 
+   ommandError
+ 
+FAILURE: Build failed with an 
+exception.
+
+* What went wrong:
+Execution failed for task 
+':app:processDebugGoogleServices'.
+> No matching client found for 
+package name 'in.qook.app' in D:\Proje
+cts\Qook-Android\QookCommander-main\Qo
+okCommander-main\android\app\google-se
+rvices.json
+
+* Try:
+> Run with --stacktrace option to get 
+the stack trace.
+> Run with --debug option to get more 
+log output.
+> Run with --scan to get full 
+insights.
+> Get more help at 
+https://help.gradle.org.
+
+BUILD FAILED in 2s
+
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+Caching disabled for task ':app:compileDebugNavigationResources' because:
+  Build cache is disabled
+Skipping task ':app:compileDebugNavigationResources' as it is up-to-date.
+Resolve mutations for :app:generateDebugResValues (Thread[#652,Execution worker Thread 11,5,main]) started.
+:app:generateDebugResValues (Thread[#652,Execution worker Thread 11,5,main]) started.
+
+> Task :app:generateDebugResValues UP-TO-DATE
+Caching disabled for task ':app:generateDebugResValues' because:
+  Build cache is disabled
+Skipping task ':app:generateDebugResValues' as it is up-to-date.
+Resolve mutations for :app:processDebugGoogleServices (Thread[#652,Execution worker Thread 11,5,main]) started.
+:app:processDebugGoogleServices (Thread[#652,Execution worker Thread 11,5,main]) started.
+
+> Task :app:processDebugGoogleServices FAILED
+Caching disabled for task ':app:processDebugGoogleServices' because:
+  Build cache is disabled
+Task ':app:processDebugGoogleServices' is not up-to-date because:
+  Task has failed previously.
+Parsing json file: D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android\app\google-services.json
+Build 3f996dff-f393-43a9-9a5f-17be73bc5e9f is closed
+32 actionable tasks: 1 executed, 31 up-to-date
+Watched directory hierarchies: [D:\Projects\Qook-Android\QookCommander-main\QookCommander-main\android]

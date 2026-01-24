@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "994727233073",
+    "project_id": "qook-commander",
+    "storage_bucket": "qook-commander.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:994727233073:android:d070d43d8e2aef2c18f710",
+        "android_client_info": {
+          "package_name": "in.qook.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBaTIJftFG5Zez8JWD7M4C0I-Vc-PUrtaA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
