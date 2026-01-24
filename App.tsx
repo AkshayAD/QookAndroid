@@ -485,6 +485,24 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
       // Save profile to Supabase
       await supabaseService.savePreferenceProfile(updatedProfile, userId);
 
+      // CRITICAL: Also update Global Household Settings from onboarding data
+      // This ensures manual generation (which uses getActivePreferences -> global settings) sees the new values
+      if (householdSettings) {
+        const updatedGlobalSettings = {
+          ...householdSettings,
+          householdSize: data.householdSize,
+          portionSize: data.portionSize,
+          country: data.country,
+          language: data.language,
+          hasTiffin: data.hasTiffin,
+          tiffinDays: data.tiffinDays,
+          tiffinFor: data.tiffinFor,
+        };
+        setHouseholdSettings(updatedGlobalSettings);
+        // Fire and forget save, or await if critical (awaiting to be safe)
+        await supabaseService.saveHouseholdSettings(userId, updatedGlobalSettings);
+      }
+
       if (isRerun) {
         // Update existing profile in state (don't replace all profiles)
         setProfiles(prev => prev.map(p => p.id === profileId ? updatedProfile : p));
