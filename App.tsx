@@ -258,6 +258,34 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     loadData();
   }, [isAuthenticated, userId]);
 
+  // PROACTIVE PHONE COLLECTION
+  // check if user has phone number, if not prompt them
+  useEffect(() => {
+    if (!isAuthenticated || !userId) return;
+
+    const checkPhone = async () => {
+      // Don't prompt if already seen in this session or recently
+      const lastPrompt = sessionStorage.getItem('qook_phone_prompt_shown');
+      if (lastPrompt) return;
+
+      try {
+        const profile = await supabaseService.getUserProfile(userId);
+        if (profile && !profile.phone) {
+          // No phone number found - prompt user
+          // Small delay to let other UI settle
+          setTimeout(() => {
+            setIsPhonePromptOpen(true);
+            sessionStorage.setItem('qook_phone_prompt_shown', 'true');
+          }, 4000);
+        }
+      } catch (e) {
+        console.error('Error checking phone status:', e);
+      }
+    };
+
+    checkPhone();
+  }, [isAuthenticated, userId]);
+
   // Subscribe to real-time schedule changes
   useEffect(() => {
     if (!isAuthenticated) return;
