@@ -723,33 +723,57 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                                                 onClick={async () => {
                                                                     try {
                                                                         setIsAnalyzing(true);
-                                                                        const photo = await CapCamera.getPhoto({
-                                                                            quality: 80,
-                                                                            resultType: CameraResultType.Base64,
-                                                                            source: CameraSource.Photos,
-                                                                            allowEditing: false,
-                                                                        });
+                                                                        let allNewItems: string[] = [];
+                                                                        let photoCount = 0;
+                                                                        let continueSelecting = true;
 
-                                                                        if (photo.base64String) {
-                                                                            const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
-                                                                                method: 'POST',
-                                                                                headers: { 'Content-Type': 'application/json' },
-                                                                                body: JSON.stringify({
-                                                                                    userId,
-                                                                                    imageData: photo.base64String,
-                                                                                    imageType: `image/${photo.format || 'jpeg'}`
-                                                                                })
-                                                                            });
-                                                                            const result = await response.json();
-                                                                            if (result.success && result.groceries?.length > 0) {
-                                                                                const newItems = result.groceries.map((g: any) => g.item);
-                                                                                const currentItems = householdSettings.pantryStaples;
-                                                                                const merged = [...new Set([...currentItems, ...newItems])];
-                                                                                setHouseholdSettings({ ...householdSettings, pantryStaples: merged });
-                                                                                alert(`Added ${newItems.length} items from photo to pantry!`);
-                                                                            } else {
-                                                                                alert('No items detected. Try a clearer photo.');
+                                                                        // Loop to allow multiple photo selections
+                                                                        while (continueSelecting) {
+                                                                            try {
+                                                                                const photo = await CapCamera.getPhoto({
+                                                                                    quality: 80,
+                                                                                    resultType: CameraResultType.Base64,
+                                                                                    source: CameraSource.Photos,
+                                                                                    allowEditing: false,
+                                                                                });
+
+                                                                                if (photo.base64String) {
+                                                                                    photoCount++;
+                                                                                    const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
+                                                                                        method: 'POST',
+                                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                                        body: JSON.stringify({
+                                                                                            userId,
+                                                                                            imageData: photo.base64String,
+                                                                                            imageType: `image/${photo.format || 'jpeg'}`
+                                                                                        })
+                                                                                    });
+                                                                                    const result = await response.json();
+                                                                                    if (result.success && result.groceries?.length > 0) {
+                                                                                        const newItems = result.groceries.map((g: any) => g.item);
+                                                                                        allNewItems = [...allNewItems, ...newItems];
+                                                                                    }
+                                                                                }
+
+                                                                                // Ask if user wants to add more photos
+                                                                                continueSelecting = window.confirm(`Photo ${photoCount} processed. Add another photo?`);
+                                                                            } catch (e: any) {
+                                                                                if (e?.message?.includes('cancelled')) {
+                                                                                    continueSelecting = false;
+                                                                                } else {
+                                                                                    throw e;
+                                                                                }
                                                                             }
+                                                                        }
+
+                                                                        // Update pantry with all collected items
+                                                                        if (allNewItems.length > 0) {
+                                                                            const currentItems = householdSettings.pantryStaples;
+                                                                            const merged = [...new Set([...currentItems, ...allNewItems])];
+                                                                            setHouseholdSettings({ ...householdSettings, pantryStaples: merged });
+                                                                            alert(`Added ${allNewItems.length} items from ${photoCount} photo(s) to pantry!`);
+                                                                        } else if (photoCount > 0) {
+                                                                            alert('No items detected. Try clearer photos.');
                                                                         }
                                                                     } catch (e: any) {
                                                                         if (!e?.message?.includes('cancelled')) {
@@ -762,7 +786,7 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                                                 disabled={isAnalyzing}
                                                                 className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors ${isAnalyzing ? 'opacity-50' : ''}`}
                                                             >
-                                                                <Image className="w-3.5 h-3.5" /> Gallery
+                                                                <Image className="w-3.5 h-3.5" /> Gallery +
                                                             </button>
                                                         </>
                                                     ) : (
