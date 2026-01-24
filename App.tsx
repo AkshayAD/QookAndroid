@@ -258,33 +258,9 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     loadData();
   }, [isAuthenticated, userId]);
 
-  // PROACTIVE PHONE COLLECTION
-  // check if user has phone number, if not prompt them
-  useEffect(() => {
-    if (!isAuthenticated || !userId) return;
 
-    const checkPhone = async () => {
-      // Don't prompt if already seen in this session or recently
-      const lastPrompt = sessionStorage.getItem('qook_phone_prompt_shown');
-      if (lastPrompt) return;
-
-      try {
-        const profile = await supabaseService.getUserProfile(userId);
-        if (profile && !profile.phone) {
-          // No phone number found - prompt user
-          // Small delay to let other UI settle
-          setTimeout(() => {
-            setIsPhonePromptOpen(true);
-            sessionStorage.setItem('qook_phone_prompt_shown', 'true');
-          }, 4000);
-        }
-      } catch (e) {
-        console.error('Error checking phone status:', e);
-      }
-    };
-
-    checkPhone();
-  }, [isAuthenticated, userId]);
+  // Phone collection now handled in onboarding wizard (NameLocationStep)
+  // Auto-prompt removed per user request
 
   // Subscribe to real-time schedule changes
   useEffect(() => {
@@ -528,6 +504,21 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
         // Award trust action credit for completing profile
         await awardProfileComplete();
+
+        // Save phone to user profile and award phone credit if provided
+        if (data.phone?.trim()) {
+          const cleanedPhone = data.phone.replace(/\D/g, '');
+          if (cleanedPhone.length >= 10) {
+            try {
+              // Save phone to user profile
+              await supabaseService.saveUserProfile(userId, { phone: data.phone.trim() });
+              // Award phone credit (handled by useTrustActions hook on next render)
+              console.log('Phone saved during onboarding - credit will be awarded by usePhoneTrustSync');
+            } catch (phoneError) {
+              console.error('Failed to save phone during onboarding:', phoneError);
+            }
+          }
+        }
 
         // Apply referral code - check both manual input and localStorage (from signup link)
         const manualCode = data.referralCode?.trim();
