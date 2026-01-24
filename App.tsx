@@ -487,21 +487,37 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
       // CRITICAL: Also update Global Household Settings from onboarding data
       // This ensures manual generation (which uses getActivePreferences -> global settings) sees the new values
-      if (householdSettings) {
-        const updatedGlobalSettings = {
-          ...householdSettings,
-          householdSize: data.householdSize,
-          portionSize: data.portionSize,
-          country: data.country,
-          language: data.language,
-          hasTiffin: data.hasTiffin,
-          tiffinDays: data.tiffinDays,
-          tiffinFor: data.tiffinFor,
-        };
-        setHouseholdSettings(updatedGlobalSettings);
-        // Fire and forget save, or await if critical (awaiting to be safe)
-        await supabaseService.saveHouseholdSettings(userId, updatedGlobalSettings);
-      }
+      // CRITICAL: Also update Global Household Settings from onboarding data
+      // This ensures manual generation (which uses getActivePreferences -> global settings) sees the new values
+      // FIX: Even if householdSettings is null (new user), we must create and save it
+      const currentSettings = householdSettings || {
+        city: '',
+        country: 'India',
+        language: 'English',
+        householdSize: 4,
+        portionSize: 'regular',
+        pantryStaples: [],
+        hasTiffin: false,
+        tiffinDays: [],
+        tiffinFor: [],
+        showPrepReminders: true,
+        showQuantities: true,
+      };
+
+      const updatedGlobalSettings = {
+        ...currentSettings,
+        householdSize: data.householdSize,
+        portionSize: data.portionSize,
+        country: data.country,
+        language: data.language,
+        hasTiffin: data.hasTiffin,
+        tiffinDays: data.tiffinDays,
+        tiffinFor: data.tiffinFor,
+      };
+
+      setHouseholdSettings(updatedGlobalSettings);
+      // Fire and forget save, or await if critical (awaiting to be safe)
+      await supabaseService.saveHouseholdSettings(userId, updatedGlobalSettings);
 
       if (isRerun) {
         // Update existing profile in state (don't replace all profiles)
