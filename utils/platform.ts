@@ -44,12 +44,11 @@ export const initAndroidApp = async (): Promise<void> => {
 
     try {
         // Set status bar style
-        // Set status bar style - immersive transparent with dark icons
-        // (Config handles this mostly, but good to enforce here)
-        await StatusBar.setStyle({ style: Style.Dark });
-        if (Capacitor.getPlatform() === 'android') {
-            await StatusBar.setOverlaysWebView({ overlay: true });
-        }
+        // Set status bar style - dark icons on white background (non-overlay mode)
+        // This ensures content doesn't render behind the status bar
+        await StatusBar.setStyle({ style: Style.Light }); // Light = dark icons on light background
+        await StatusBar.setBackgroundColor({ color: '#ffffff' });
+        await StatusBar.setOverlaysWebView({ overlay: false }); // IMPORTANT: false = content below status bar
 
         // Hide splash screen after app is ready
         await SplashScreen.hide();
