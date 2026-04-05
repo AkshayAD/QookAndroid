@@ -1,5 +1,9 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
+import {
+    buildMealPlanPrompt as buildSharedMealPlanPrompt,
+    normalizeGeneratedWeeklyPlan,
+} from './promptContext';
 
 /**
  * Streaming AI Proxy for QookCommander
@@ -125,6 +129,13 @@ ${!mealsToGenerate.includes('lunch') ? '- lunch: MUST be empty string ""' : ''}
 ${!mealsToGenerate.includes('dinner') ? '- dinner: MUST be empty string ""' : ''}
 ` : '';
 
+    const activeInventoryItems = Array.from(new Set([
+        ...(preferences?.activeInventoryItems || []),
+        ...(learningSummary?.activeInventoryItems || []),
+    ])).filter(Boolean);
+    const softPositiveSignals = learningSummary?.softPositiveSignals || [];
+    const softNegativeSignals = learningSummary?.softNegativeSignals || [];
+
     let learningContext = '';
     if (learningSummary?.totalMealCount > 0) {
         learningContext = `
@@ -133,6 +144,24 @@ Breakfast patterns: ${learningSummary.acceptedBreakfasts?.slice(0, 8).join(', ')
 Lunch patterns: ${learningSummary.acceptedLunches?.slice(0, 8).join(', ') || 'N/A'}
 Dinner patterns: ${learningSummary.acceptedDinners?.slice(0, 8).join(', ') || 'N/A'}
 DO NOT REPEAT: ${learningSummary.recentMeals?.join(', ') || 'N/A'}
+`;
+    }
+
+    if (softPositiveSignals.length > 0 || softNegativeSignals.length > 0) {
+        learningContext += `
+SOFT SIGNALS FROM RECENT ACTIONS:
+Lean into: ${softPositiveSignals.slice(0, 8).join(', ') || 'None'}
+Reduce or avoid: ${softNegativeSignals.slice(0, 8).join(', ') || 'None'}
+`;
+    }
+
+    if (activeInventoryItems.length > 0) {
+        learningContext += `
+ACTIVE INVENTORY TO PRIORITIZE:
+${activeInventoryItems.join(', ')}
+- Prefer meals that use these items first, especially perishables
+- Treat these ingredients as already available in the kitchen
+- Help the user consume on-hand items before suggesting new purchases
 `;
     }
 
@@ -469,11 +498,12 @@ export default async function handler(req: Request) {
                 tiffinDays: householdSettings.tiffinDays,
                 tiffinFor: householdSettings.tiffinFor,
                 showPrepReminders: householdSettings.showPrepReminders,
+                showQuantities: householdSettings.showQuantities,
             } : {})
         };
 
         // Build the FULL comprehensive prompt with merged preferences
-        const prompt = buildMealPlanPrompt(mergedPreferences, learningSummary);
+        const prompt = buildSharedMealPlanPrompt(mergedPreferences, learningSummary);
 
         // Schema for structured output
         const schema = {
@@ -582,7 +612,7 @@ export default async function handler(req: Request) {
 
                 // Parse final result
                 try {
-                    const result = JSON.parse(fullText);
+                    const result = normalizeGeneratedWeeklyPlan(JSON.parse(fullText), mergedPreferences);
                     await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'complete', data: result })}\n\n`));
                 } catch (parseError) {
                     await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'error', message: 'Failed to parse response' })}\n\n`));

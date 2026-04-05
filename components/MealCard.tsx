@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { DayPlan } from '../types';
-import { RefreshCw, Sun, CloudSun, Moon, MessageSquarePlus, Pencil, Check, X, Trash2, Bell, Users, PlayCircle, Lock } from 'lucide-react';
+import { RefreshCw, Sun, CloudSun, Moon, MessageSquarePlus, Pencil, Check, X, Trash2, Bell, Users, PlayCircle, Lock, Shuffle } from 'lucide-react';
 import MealList from './MealList';
 import { useFamily } from '../contexts/FamilyContext';
 import { useFeatureGate, Feature } from '../hooks/useFeatureGate';
@@ -10,6 +10,7 @@ import FeatureGateModal from './FeatureGateModal';
 interface Props {
   dayPlan: DayPlan;
   dayIndex: number;
+  enabledMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
   onRegenerate: (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner') => void;
   onSmartEdit: (dayPlan: DayPlan, dayIndex: number) => void;
   onMealUpdate?: (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner', newValue: string) => void;
@@ -28,6 +29,7 @@ interface Props {
 const MealCard: React.FC<Props> = ({
   dayPlan,
   dayIndex,
+  enabledMeals = ['breakfast', 'lunch', 'dinner'],
   onRegenerate,
   onSmartEdit,
   onMealUpdate,
@@ -58,9 +60,13 @@ const MealCard: React.FC<Props> = ({
     dinner: dayPlan.dinner || ''
   });
 
-  // Check if this card is "empty" (no meals)
-  const isEmpty = !dayPlan.breakfast && !dayPlan.lunch && !dayPlan.dinner;
+  const visibleMeals = enabledMeals.length > 0 ? enabledMeals : ['breakfast', 'lunch', 'dinner'];
 
+  // Check if this card is "empty" (no visible meals)
+  const isEmpty = visibleMeals.every((mealType) => {
+    const mealValue = dayPlan[mealType];
+    return typeof mealValue !== 'string' || mealValue.trim() === '';
+  });
   // Feature gate handler
   const handleGatedAction = (feature: Feature, action: () => void) => {
     if (canAccess(feature)) {
@@ -82,13 +88,13 @@ const MealCard: React.FC<Props> = ({
 
   const saveEdits = () => {
     if (onMealUpdate) {
-      if (editValues.breakfast !== dayPlan.breakfast) {
+      if (visibleMeals.includes('breakfast') && editValues.breakfast !== dayPlan.breakfast) {
         onMealUpdate(dayIndex, 'breakfast', editValues.breakfast);
       }
-      if (editValues.lunch !== dayPlan.lunch) {
+      if (visibleMeals.includes('lunch') && editValues.lunch !== dayPlan.lunch) {
         onMealUpdate(dayIndex, 'lunch', editValues.lunch);
       }
-      if (editValues.dinner !== dayPlan.dinner) {
+      if (visibleMeals.includes('dinner') && editValues.dinner !== dayPlan.dinner) {
         onMealUpdate(dayIndex, 'dinner', editValues.dinner);
       }
     }
@@ -110,7 +116,8 @@ const MealCard: React.FC<Props> = ({
     Icon: React.ElementType,
     colorClass: string,
     label: string,
-    placeholder: string
+    placeholder: string,
+    isFirstSection: boolean
   ) => {
     const mealContent = dayPlan[type] || '';
     const isSelected = selectedSwap?.dayIndex === dayIndex && selectedSwap?.mealType === type;
@@ -121,7 +128,7 @@ const MealCard: React.FC<Props> = ({
     return (
       <div
         onClick={() => isSwapMode && onSwapSelect && onSwapSelect(dayIndex, type)}
-        className={`relative ${type !== 'breakfast' ? 'pt-2 border-t border-dashed border-gray-200' : ''} 
+        className={`relative ${!isFirstSection ? 'pt-2 border-t border-dashed border-gray-200' : ''} 
           ${isSwapMode ? 'cursor-pointer transition-all p-2 rounded-lg' : ''}
           ${isSelected ? 'bg-green-50 ring-2 ring-green-500 shadow-sm' : ''}
           ${isSwapTarget ? 'hover:bg-gray-50 hover:ring-2 hover:ring-indigo-200' : ''}
@@ -135,6 +142,18 @@ const MealCard: React.FC<Props> = ({
           {/* Regen and Recipe buttons - only when not editing */}
           {!isSwapMode && !isEditing && hasMeal && (
             <div className="flex items-center gap-0.5">
+              {onSwapSelect && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSwapSelect(dayIndex, type);
+                  }}
+                  className="opacity-60 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-emerald-600"
+                  title={`Swap ${label.toLowerCase()}`}
+                >
+                  <Shuffle className="w-3.5 h-3.5" />
+                </button>
+              )}
               {onOpenRecipe && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onOpenRecipe(mealContent); }}
@@ -275,9 +294,9 @@ const MealCard: React.FC<Props> = ({
 
         {/* Meal Sections */}
         <div className="p-4 space-y-4">
-          {renderMealSection('breakfast', Sun, 'text-amber-600', 'BREAKFAST', placeholders.breakfast[dayIndex % 7])}
-          {renderMealSection('lunch', CloudSun, 'text-orange-600', 'LUNCH', placeholders.lunch[dayIndex % 7])}
-          {renderMealSection('dinner', Moon, 'text-indigo-600', 'DINNER', placeholders.dinner[dayIndex % 7])}
+          {visibleMeals.includes('breakfast') && renderMealSection('breakfast', Sun, 'text-amber-600', 'BREAKFAST', placeholders.breakfast[dayIndex % 7], true)}
+          {visibleMeals.includes('lunch') && renderMealSection('lunch', CloudSun, 'text-orange-600', 'LUNCH', placeholders.lunch[dayIndex % 7], !visibleMeals.includes('breakfast'))}
+          {visibleMeals.includes('dinner') && renderMealSection('dinner', Moon, 'text-indigo-600', 'DINNER', placeholders.dinner[dayIndex % 7], !visibleMeals.includes('breakfast') && !visibleMeals.includes('lunch'))}
         </div>
 
         {/* Prep-Ahead Reminders - Skip for last day since next day is not planned */}
@@ -302,19 +321,19 @@ const MealCard: React.FC<Props> = ({
                   Prep Ahead
                 </div>
                 <div className="space-y-1 text-xs text-amber-800">
-                  {isValidPrep(dayPlan.prepAhead?.forBreakfast) && (
+                  {visibleMeals.includes('breakfast') && isValidPrep(dayPlan.prepAhead?.forBreakfast) && (
                     <div className="flex items-start gap-1.5">
                       <span className="text-amber-500">•</span>
                       <span>{dayPlan.prepAhead.forBreakfast}</span>
                     </div>
                   )}
-                  {isValidPrep(dayPlan.prepAhead?.forLunch) && (
+                  {visibleMeals.includes('lunch') && isValidPrep(dayPlan.prepAhead?.forLunch) && (
                     <div className="flex items-start gap-1.5">
                       <span className="text-amber-500">•</span>
                       <span>{dayPlan.prepAhead.forLunch}</span>
                     </div>
                   )}
-                  {isValidPrep(dayPlan.prepAhead?.forDinner) && (
+                  {visibleMeals.includes('dinner') && isValidPrep(dayPlan.prepAhead?.forDinner) && (
                     <div className="flex items-start gap-1.5">
                       <span className="text-amber-500">•</span>
                       <span>{dayPlan.prepAhead.forDinner}</span>

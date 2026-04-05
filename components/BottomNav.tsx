@@ -1,16 +1,16 @@
 import React from 'react';
-import { ClipboardList, Calendar as CalendarIcon, ShoppingCart, User } from 'lucide-react';
+import { ClipboardList, ShoppingCart, User, Settings } from 'lucide-react';
 
 interface BottomNavProps {
-    activeTab: 'plan' | 'calendar' | 'grocery' | 'profile';
-    onTabChange: (tab: 'plan' | 'calendar' | 'grocery' | 'profile') => void;
+    activeTab: 'plan' | 'grocery' | 'preferences' | 'profile';
+    onTabChange: (tab: 'plan' | 'grocery' | 'preferences' | 'profile') => void;
 }
 
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     const tabs = [
         { id: 'plan', label: 'Plan', icon: ClipboardList },
-        { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
         { id: 'grocery', label: 'Grocery', icon: ShoppingCart },
+        { id: 'preferences', label: 'Setup', icon: Settings },
         { id: 'profile', label: 'Profile', icon: User },
     ] as const;
 

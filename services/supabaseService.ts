@@ -5,6 +5,8 @@
  */
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { buildInventorySummary, summarizePreferenceSignals } from './plannerMemoryService';
+import { sanitizeDayPlan, sanitizeWeeklyPlan } from '../lib/mealSanitizer';
 
 // Re-export supabase for direct use in realtime subscriptions
 export { supabase };
@@ -14,16 +16,42 @@ import {
     DayPlan,
     Schedule,
     GroceryItem,
+    InventoryItem,
     MealHistoryEntry,
     MealType,
+    PreferenceSignal,
     SavedGroceryList
 } from '../types';
 
 // Helper to check if we should use localStorage instead of Supabase
 // Returns true if Supabase is not configured OR if user is in "local/offline" mode
-const isOfflineMode = (userId: string): boolean => {
-    return !isSupabaseConfigured || !supabase || userId === 'local';
+export const isOfflineMode = (userId: string): boolean => {
+    const offline = !isSupabaseConfigured || !supabase || userId === 'local';
+    console.log('[SUPABASE DEBUG] isOfflineMode check:', { isSupabaseConfigured, supabaseExists: !!supabase, userId, result: offline });
+    return offline;
 };
+
+const INVENTORY_ITEMS_KEY = 'qookcommander_inventory_items';
+const PREFERENCE_SIGNALS_KEY = 'qookcommander_preference_signals';
+
+function isMissingRelationError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+        return false;
+    }
+
+    const message = 'message' in error ? String(error.message || '') : '';
+    const details = 'details' in error ? String(error.details || '') : '';
+    return /relation .* does not exist/i.test(message) || /relation .* does not exist/i.test(details);
+}
+
+function readLocalCollection<T>(key: string): T[] {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : [];
+}
+
+function writeLocalCollection<T>(key: string, data: T[]) {
+    localStorage.setItem(key, JSON.stringify(data));
+}
 
 // ============================================================================
 // USER SETTINGS (Cross-device sync for API key, Cook contact)
@@ -253,13 +281,16 @@ export const getHouseholdSettings = async (userId: string): Promise<HouseholdSet
 };
 
 export const saveHouseholdSettings = async (userId: string, settings: Partial<HouseholdSettings>): Promise<void> => {
+    console.log('[SUPABASE DEBUG] saveHouseholdSettings called:', { userId, settings });
     if (isOfflineMode(userId)) {
         // Fallback to localStorage
+        console.log('[SUPABASE DEBUG] OFFLINE MODE - saving to localStorage only!');
         const current = await getHouseholdSettings(userId);
         const updated = { ...current, ...settings };
         localStorage.setItem('cookcommander_household_settings', JSON.stringify(updated));
         return;
     }
+    console.log('[SUPABASE DEBUG] ONLINE MODE - saving to Supabase');
 
     try {
         const updateData: any = { user_id: userId, updated_at: new Date().toISOString() };
@@ -275,14 +306,16 @@ export const saveHouseholdSettings = async (userId: string, settings: Partial<Ho
         if (settings.showPrepReminders !== undefined) updateData.show_prep_reminders = settings.showPrepReminders;
         if (settings.showQuantities !== undefined) updateData.show_quantities = settings.showQuantities;
 
+        console.log('[SUPABASE DEBUG] Upserting to user_settings:', updateData);
         const { error } = await supabase
             .from('user_settings')
             .upsert(updateData, { onConflict: 'user_id' });
 
         if (error) {
-            console.error('Error saving household settings:', error);
+            console.error('[SUPABASE DEBUG] ERROR saving household settings:', error);
             throw error;
         }
+        console.log('[SUPABASE DEBUG] SUCCESS - household settings saved to Supabase');
     } catch (err) {
         console.error('Error in saveHouseholdSettings:', err);
         throw err;
@@ -460,7 +493,7 @@ export const deletePreferenceProfile = async (profileId: string, userId: string 
 export const getCurrentPlan = async (userId: string, familyGroupId?: string | null): Promise<WeeklyPlan | null> => {
     if (isOfflineMode(userId)) {
         const saved = localStorage.getItem('qookcommander_plan');
-        return saved ? JSON.parse(saved) : null;
+        return saved ? sanitizeWeeklyPlan(JSON.parse(saved)) : null;
     }
 
     let query = supabase
@@ -488,7 +521,7 @@ export const getCurrentPlan = async (userId: string, familyGroupId?: string | nu
         throw error;
     }
 
-    return { days: data.days as DayPlan[] };
+    return sanitizeWeeklyPlan({ days: data.days as DayPlan[] });
 };
 
 export const savePlan = async (
@@ -497,8 +530,9 @@ export const savePlan = async (
     profileId?: string,
     familyGroupId?: string | null
 ): Promise<string> => {
+    const sanitizedPlan = sanitizeWeeklyPlan(plan);
     if (isOfflineMode(userId)) {
-        localStorage.setItem('qookcommander_plan', JSON.stringify(plan));
+        localStorage.setItem('qookcommander_plan', JSON.stringify(sanitizedPlan));
         return 'local';
     }
 
@@ -518,7 +552,7 @@ export const savePlan = async (
     const insertData: any = {
         user_id: userId,
         profile_id: profileId,
-        days: plan.days as any,
+        days: sanitizedPlan.days as any,
         is_current: true,
     };
 
@@ -573,7 +607,10 @@ export const getSchedule = async (
 ): Promise<Schedule> => {
     if (isOfflineMode(userId)) {
         const saved = localStorage.getItem('qookcommander_schedule');
-        return saved ? JSON.parse(saved) : {};
+        const rawSchedule: Schedule = saved ? JSON.parse(saved) : {};
+        return Object.fromEntries(
+            Object.entries(rawSchedule).map(([date, dayPlan]) => [date, sanitizeDayPlan(dayPlan)])
+        );
     }
 
     let query = supabase
@@ -603,14 +640,14 @@ export const getSchedule = async (
 
     const schedule: Schedule = {};
     (data || []).forEach((row: any) => {
-        schedule[row.date] = {
+        schedule[row.date] = sanitizeDayPlan({
             day: row.date,
             breakfast: row.breakfast || '',
             lunch: row.lunch || '',
             dinner: row.dinner || '',
             prepAhead: row.prep_ahead || undefined,
             alternatives: row.alternatives || null  // Load alternatives
-        };
+        });
     });
 
     return schedule;
@@ -622,10 +659,11 @@ export const saveScheduledMeal = async (
     userId: string,
     familyGroupId?: string | null  // Optional: when provided, save as family meal
 ): Promise<void> => {
+    const sanitizedDayPlan = sanitizeDayPlan(dayPlan);
     if (isOfflineMode(userId)) {
         const saved = localStorage.getItem('qookcommander_schedule');
         const schedule: Schedule = saved ? JSON.parse(saved) : {};
-        schedule[date] = dayPlan;
+        schedule[date] = sanitizedDayPlan;
         localStorage.setItem('qookcommander_schedule', JSON.stringify(schedule));
         return;
     }
@@ -650,11 +688,11 @@ export const saveScheduledMeal = async (
     const mealData: any = {
         user_id: userId,
         date: date,
-        breakfast: dayPlan.breakfast || null,
-        lunch: dayPlan.lunch || null,
-        dinner: dayPlan.dinner || null,
-        prep_ahead: dayPlan.prepAhead || null,
-        alternatives: dayPlan.alternatives || null,
+        breakfast: sanitizedDayPlan.breakfast || null,
+        lunch: sanitizedDayPlan.lunch || null,
+        dinner: sanitizedDayPlan.dinner || null,
+        prep_ahead: sanitizedDayPlan.prepAhead || null,
+        alternatives: sanitizedDayPlan.alternatives || null,
     };
 
     // If saving as family meal, set family_group_id and last_modified_by
@@ -679,11 +717,12 @@ export const archivePlanToSchedule = async (
     userId: string,
     familyGroupId?: string | null  // Optional: save as family meals
 ): Promise<void> => {
+    const sanitizedPlan = sanitizeWeeklyPlan(plan);
     if (isOfflineMode(userId)) {
         const saved = localStorage.getItem('qookcommander_schedule');
         const schedule: Schedule = saved ? JSON.parse(saved) : {};
 
-        plan.days.forEach((day, idx) => {
+        sanitizedPlan.days.forEach((day, idx) => {
             const date = addDays(startDate, idx);
             schedule[date] = { ...day, day: date };
         });
@@ -693,7 +732,7 @@ export const archivePlanToSchedule = async (
         return;
     }
 
-    const rows = plan.days.map((day, idx) => {
+    const rows = sanitizedPlan.days.map((day, idx) => {
         const row: any = {
             user_id: userId,
             date: addDays(startDate, idx),
@@ -701,7 +740,7 @@ export const archivePlanToSchedule = async (
             lunch: day.lunch || null,
             dinner: day.dinner || null,
             prep_ahead: day.prepAhead || null,
-            alternatives: plan.alternatives || null,
+            alternatives: sanitizedPlan.alternatives || null,
         };
         // Add family_group_id if saving for family
         if (familyGroupId) {
@@ -847,6 +886,343 @@ export const saveMealHistory = async (
 };
 
 // ============================================================================
+// INVENTORY ITEMS
+// ============================================================================
+
+function filterInventoryByContext(items: InventoryItem[], familyGroupId?: string | null): InventoryItem[] {
+    return items.filter((item) => (item.familyGroupId || null) === (familyGroupId || null));
+}
+
+function mapInventoryRow(row: any): InventoryItem {
+    return {
+        id: row.id,
+        name: row.name,
+        source: row.source,
+        capturedAt: row.captured_at || row.capturedAt || new Date().toISOString(),
+        expiresAt: row.expires_at || row.expiresAt || null,
+        status: row.status || 'active',
+        confidence: row.confidence ?? null,
+        familyGroupId: row.family_group_id || row.familyGroupId || null,
+    };
+}
+
+export const getInventoryItems = async (
+    userId: string,
+    familyGroupId?: string | null
+): Promise<InventoryItem[]> => {
+    if (isOfflineMode(userId)) {
+        return filterInventoryByContext(readLocalCollection<InventoryItem>(INVENTORY_ITEMS_KEY), familyGroupId)
+            .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+    }
+
+    try {
+        let query = supabase
+            .from('inventory_items')
+            .select('*')
+            .eq('user_id', userId)
+            .order('captured_at', { ascending: false });
+
+        if (familyGroupId) {
+            query = query.eq('family_group_id', familyGroupId);
+        } else {
+            query = query.is('family_group_id', null);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            if (isMissingRelationError(error)) {
+                return filterInventoryByContext(readLocalCollection<InventoryItem>(INVENTORY_ITEMS_KEY), familyGroupId)
+                    .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+            }
+            throw error;
+        }
+
+        return (data || []).map(mapInventoryRow);
+    } catch (error) {
+        console.error('Error fetching inventory items:', error);
+        return filterInventoryByContext(readLocalCollection<InventoryItem>(INVENTORY_ITEMS_KEY), familyGroupId)
+            .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+    }
+};
+
+export const addInventoryItems = async (
+    names: string[],
+    userId: string,
+    familyGroupId?: string | null,
+    source: InventoryItem['source'] = 'manual',
+    confidence: number = 0.8
+): Promise<InventoryItem[]> => {
+    const normalizedNames = Array.from(
+        new Set(
+            names
+                .map((name) => name.trim())
+                .filter(Boolean)
+                .map((name) => name.replace(/\s+/g, ' '))
+        )
+    );
+
+    if (normalizedNames.length === 0) {
+        return getInventoryItems(userId, familyGroupId);
+    }
+
+    const createdItems: InventoryItem[] = normalizedNames.map((name) => ({
+        id: crypto.randomUUID(),
+        name,
+        source,
+        capturedAt: new Date().toISOString(),
+        expiresAt: null,
+        status: 'active',
+        confidence,
+        familyGroupId: familyGroupId || null,
+    }));
+
+    const existingLocal = readLocalCollection<InventoryItem>(INVENTORY_ITEMS_KEY);
+    const existingForContext = filterInventoryByContext(existingLocal, familyGroupId);
+    const existingNames = new Set(existingForContext.map((item) => item.name.toLowerCase()));
+    const mergedLocal = [
+        ...existingLocal,
+        ...createdItems.filter((item) => !existingNames.has(item.name.toLowerCase())),
+    ];
+    writeLocalCollection(INVENTORY_ITEMS_KEY, mergedLocal);
+
+    if (isOfflineMode(userId)) {
+        return filterInventoryByContext(mergedLocal, familyGroupId).sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+    }
+
+    try {
+        const rows = createdItems.map((item) => ({
+            id: item.id,
+            user_id: userId,
+            family_group_id: item.familyGroupId,
+            name: item.name,
+            source: item.source,
+            status: item.status,
+            confidence: item.confidence,
+            captured_at: item.capturedAt,
+            expires_at: item.expiresAt,
+        }));
+
+        const { error } = await supabase
+            .from('inventory_items')
+            .upsert(rows as any, { onConflict: 'user_id,family_group_id,name' });
+
+        if (error && !isMissingRelationError(error)) {
+            throw error;
+        }
+    } catch (error) {
+        console.error('Error saving inventory items:', error);
+    }
+
+    return getInventoryItems(userId, familyGroupId);
+};
+
+export const removeInventoryItem = async (
+    itemId: string,
+    userId: string,
+    familyGroupId?: string | null
+): Promise<void> => {
+    const localItems = readLocalCollection<InventoryItem>(INVENTORY_ITEMS_KEY).filter((item) => item.id !== itemId);
+    writeLocalCollection(INVENTORY_ITEMS_KEY, localItems);
+
+    if (isOfflineMode(userId)) {
+        return;
+    }
+
+    try {
+        let query = supabase
+            .from('inventory_items')
+            .delete()
+            .eq('id', itemId)
+            .eq('user_id', userId);
+
+        if (familyGroupId) {
+            query = query.eq('family_group_id', familyGroupId);
+        }
+
+        const { error } = await query;
+        if (error && !isMissingRelationError(error)) {
+            throw error;
+        }
+    } catch (error) {
+        console.error('Error removing inventory item:', error);
+    }
+};
+
+// ============================================================================
+// PREFERENCE SIGNALS
+// ============================================================================
+
+function filterSignalsByContext(signals: PreferenceSignal[], familyGroupId?: string | null): PreferenceSignal[] {
+    return signals.filter((signal) => (signal.familyGroupId || null) === (familyGroupId || null));
+}
+
+function mapPreferenceSignalRow(row: any): PreferenceSignal {
+    return {
+        id: row.id,
+        mealType: row.meal_type || row.mealType || null,
+        actionType: row.action_type || row.actionType,
+        originalValue: row.original_value || row.originalValue || null,
+        newValue: row.new_value || row.newValue || null,
+        rawInstruction: row.raw_instruction || row.rawInstruction || null,
+        positiveTags: row.positive_tags || row.positiveTags || [],
+        negativeTags: row.negative_tags || row.negativeTags || [],
+        confidence: Number(row.confidence ?? 0.7),
+        requiresConfirmation: row.requires_confirmation ?? row.requiresConfirmation ?? true,
+        appliedAt: row.applied_at || row.appliedAt || null,
+        createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+        familyGroupId: row.family_group_id || row.familyGroupId || null,
+    };
+}
+
+export const getPreferenceSignals = async (
+    userId: string,
+    familyGroupId?: string | null
+): Promise<PreferenceSignal[]> => {
+    if (isOfflineMode(userId)) {
+        return filterSignalsByContext(readLocalCollection<PreferenceSignal>(PREFERENCE_SIGNALS_KEY), familyGroupId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+
+    try {
+        let query = supabase
+            .from('preference_signals')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false });
+
+        if (familyGroupId) {
+            query = query.eq('family_group_id', familyGroupId);
+        } else {
+            query = query.is('family_group_id', null);
+        }
+
+        const { data, error } = await query;
+        if (error) {
+            if (isMissingRelationError(error)) {
+                return filterSignalsByContext(readLocalCollection<PreferenceSignal>(PREFERENCE_SIGNALS_KEY), familyGroupId)
+                    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+            }
+            throw error;
+        }
+
+        return (data || []).map(mapPreferenceSignalRow);
+    } catch (error) {
+        console.error('Error fetching preference signals:', error);
+        return filterSignalsByContext(readLocalCollection<PreferenceSignal>(PREFERENCE_SIGNALS_KEY), familyGroupId)
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    }
+};
+
+export const savePreferenceSignal = async (
+    signal: Omit<PreferenceSignal, 'id' | 'createdAt' | 'familyGroupId'>,
+    userId: string,
+    familyGroupId?: string | null
+): Promise<PreferenceSignal> => {
+    const newSignal: PreferenceSignal = {
+        ...signal,
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        familyGroupId: familyGroupId || null,
+    };
+
+    const localSignals = readLocalCollection<PreferenceSignal>(PREFERENCE_SIGNALS_KEY);
+    writeLocalCollection(PREFERENCE_SIGNALS_KEY, [newSignal, ...localSignals]);
+
+    if (isOfflineMode(userId)) {
+        return newSignal;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('preference_signals')
+            .insert({
+                id: newSignal.id,
+                user_id: userId,
+                family_group_id: newSignal.familyGroupId,
+                meal_type: newSignal.mealType,
+                action_type: newSignal.actionType,
+                original_value: newSignal.originalValue,
+                new_value: newSignal.newValue,
+                raw_instruction: newSignal.rawInstruction,
+                positive_tags: newSignal.positiveTags,
+                negative_tags: newSignal.negativeTags,
+                confidence: newSignal.confidence,
+                requires_confirmation: newSignal.requiresConfirmation,
+                applied_at: newSignal.appliedAt,
+                created_at: newSignal.createdAt,
+            } as any);
+
+        if (error && !isMissingRelationError(error)) {
+            throw error;
+        }
+    } catch (error) {
+        console.error('Error saving preference signal:', error);
+    }
+
+    return newSignal;
+};
+
+async function updateSignalsInLocalStorage(
+    signalIds: string[],
+    updater: (signal: PreferenceSignal) => PreferenceSignal
+) {
+    const localSignals = readLocalCollection<PreferenceSignal>(PREFERENCE_SIGNALS_KEY).map((signal) => (
+        signalIds.includes(signal.id) ? updater(signal) : signal
+    ));
+    writeLocalCollection(PREFERENCE_SIGNALS_KEY, localSignals);
+}
+
+export const markPreferenceSignalsApplied = async (
+    signalIds: string[],
+    userId: string
+): Promise<void> => {
+    const appliedAt = new Date().toISOString();
+    await updateSignalsInLocalStorage(signalIds, (signal) => ({ ...signal, appliedAt, requiresConfirmation: false }));
+
+    if (isOfflineMode(userId) || signalIds.length === 0) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('preference_signals')
+            .update({ applied_at: appliedAt, requires_confirmation: false })
+            .in('id', signalIds);
+
+        if (error && !isMissingRelationError(error)) {
+            throw error;
+        }
+    } catch (error) {
+        console.error('Error marking preference signals applied:', error);
+    }
+};
+
+export const dismissPreferenceSignals = async (
+    signalIds: string[],
+    userId: string
+): Promise<void> => {
+    await updateSignalsInLocalStorage(signalIds, (signal) => ({ ...signal, requiresConfirmation: false }));
+
+    if (isOfflineMode(userId) || signalIds.length === 0) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('preference_signals')
+            .update({ requires_confirmation: false })
+            .in('id', signalIds);
+
+        if (error && !isMissingRelationError(error)) {
+            throw error;
+        }
+    } catch (error) {
+        console.error('Error dismissing preference signals:', error);
+    }
+};
+
+// ============================================================================
 // REAL-TIME SUBSCRIPTIONS
 // ============================================================================
 
@@ -934,11 +1310,17 @@ export interface MealLearningSummary {
     totalMealCount: number;
     oldestDate: string | null;
     newestDate: string | null;
+    activeInventorySummary?: string;
+    activeInventoryItems?: string[];
+    softPositiveSignals?: string[];
+    softNegativeSignals?: string[];
+    useInventoryFirst?: boolean;
 }
 
 export const getMealLearningSummary = async (
     userId: string,
-    monthsBack: number = 3
+    monthsBack: number = 3,
+    familyGroupId?: string | null
 ): Promise<MealLearningSummary> => {
     const emptySummary: MealLearningSummary = {
         acceptedBreakfasts: [],
@@ -948,6 +1330,11 @@ export const getMealLearningSummary = async (
         totalMealCount: 0,
         oldestDate: null,
         newestDate: null,
+        activeInventorySummary: '',
+        activeInventoryItems: [],
+        softPositiveSignals: [],
+        softNegativeSignals: [],
+        useInventoryFirst: false,
     };
 
     if (isOfflineMode(userId)) {
@@ -974,6 +1361,12 @@ export const getMealLearningSummary = async (
             }
         });
 
+        const inventoryItems = await getInventoryItems(userId, familyGroupId);
+        const signalSummary = summarizePreferenceSignals(
+            await getPreferenceSignals(userId, familyGroupId)
+        );
+        const inventorySummary = buildInventorySummary(inventoryItems);
+
         return {
             acceptedBreakfasts: [...new Set(breakfasts.filter(Boolean))],
             acceptedLunches: [...new Set(lunches.filter(Boolean))],
@@ -982,6 +1375,11 @@ export const getMealLearningSummary = async (
             totalMealCount: allMeals.filter(Boolean).length,
             oldestDate: null,
             newestDate: null,
+            activeInventorySummary: inventorySummary.label,
+            activeInventoryItems: inventorySummary.names,
+            softPositiveSignals: signalSummary.positiveFocus,
+            softNegativeSignals: signalSummary.negativeFocus,
+            useInventoryFirst: inventorySummary.names.length > 0,
         };
     }
 
@@ -1027,6 +1425,12 @@ export const getMealLearningSummary = async (
             }
         });
 
+        const inventoryItems = await getInventoryItems(userId, familyGroupId);
+        const signalSummary = summarizePreferenceSignals(
+            await getPreferenceSignals(userId, familyGroupId)
+        );
+        const inventorySummary = buildInventorySummary(inventoryItems);
+
         return {
             acceptedBreakfasts: [...new Set(breakfasts)],
             acceptedLunches: [...new Set(lunches)],
@@ -1035,6 +1439,11 @@ export const getMealLearningSummary = async (
             totalMealCount: breakfasts.length + lunches.length + dinners.length,
             oldestDate: scheduledMeals[scheduledMeals.length - 1]?.date || null,
             newestDate: scheduledMeals[0]?.date || null,
+            activeInventorySummary: inventorySummary.label,
+            activeInventoryItems: inventorySummary.names,
+            softPositiveSignals: signalSummary.positiveFocus,
+            softNegativeSignals: signalSummary.negativeFocus,
+            useInventoryFirst: inventorySummary.names.length > 0,
         };
     } catch (error) {
         console.error('Error in getMealLearningSummary:', error);
@@ -1324,13 +1733,13 @@ export const getWeekFromSchedule = async (
         const date = addDays(weekStartDate, i);
         const meal = data.find((m: any) => m.date === date);
         if (meal) {
-            days.push({
+            days.push(sanitizeDayPlan({
                 day: meal.date,
                 breakfast: meal.breakfast || '',
                 lunch: meal.lunch || '',
                 dinner: meal.dinner || '',
                 prepAhead: meal.prep_ahead || undefined
-            });
+            }));
         } else {
             days.push({ day: date, breakfast: '', lunch: '', dinner: '' });
         }

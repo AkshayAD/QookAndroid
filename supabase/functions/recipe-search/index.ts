@@ -170,9 +170,39 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
             body: JSON.stringify({
                 contents: [{ parts: [{ text: prompt }] }],
                 generationConfig: {
-                    maxOutputTokens: 500,
+                    maxOutputTokens: 2000,
                     temperature: 0.1,
-                    responseMimeType: "application/json" // Try forcing JSON mode
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            time: { type: "NUMBER", description: "Cooking time in minutes (number only)" },
+                            difficulty: { type: "STRING", enum: ["Easy", "Medium", "Moderate", "Advanced"] },
+                            ingredients: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        name: { type: "STRING" },
+                                        quantity: { type: "STRING" },
+                                        category: { type: "STRING", enum: ["dairy", "vegetables", "spices", "grains", "protein", "oils", "condiments", "other"] }
+                                    },
+                                    required: ["name", "quantity", "category"]
+                                }
+                            },
+                            nutrition: {
+                                type: "OBJECT",
+                                properties: {
+                                    calories: { type: "NUMBER" },
+                                    protein: { type: "NUMBER" },
+                                    carbs: { type: "NUMBER" },
+                                    fat: { type: "NUMBER" }
+                                },
+                                required: ["calories", "protein", "carbs", "fat"]
+                            }
+                        },
+                        required: ["ingredients", "time", "difficulty", "nutrition"]
+                    }
                 },
             }),
         });
@@ -184,24 +214,35 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
             // Mask Key for debug output
             const maskedUrl = url.replace(GEMINI_API_KEY, '***');
 
-            return {
-                cookTimeMinutes: 0,
-                difficulty: 'Easy',
-                ingredients: [
-                    {
-                        name: `DEBUG_ERR_${response.status}`,
-                        quantity: `URL: ${maskedUrl} | Msg: ${errText.substring(0, 100)}`,
-                        category: 'error'
-                    }
-                ],
-                nutrition: null
-            };
+            return null;
         }
 
         const data = await response.json();
+        // console.log("Raw Gemini Response:", JSON.stringify(data));
+
         let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        const parsed = JSON.parse(text);
+        // console.log("Extracted Text:", text);
+
+        if (!text) {
+            throw new Error(`Empty text from AI. raw=${JSON.stringify(data).substring(0, 200)}`);
+        }
+
+        // Robust JSON extraction: Find first '{' and last '}'
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end !== -1) {
+            text = text.substring(start, end + 1);
+        } else {
+            // fallback cleanup if no braces found (unlikely for valid JSON)
+            text = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`JSON Parse Error: ${e.message} | Text: ${text.substring(0, 200)}...`);
+        }
 
         const cookTime = typeof parsed.time === 'number' ? parsed.time : null;
         const difficulty = parsed.difficulty as any;
@@ -222,140 +263,165 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
         return { cookTimeMinutes: cookTime, difficulty, ingredients, nutrition };
     } catch (error: any) {
         console.error('AI logic error:', error);
-        return {
-            cookTimeMinutes: 0,
-            difficulty: 'Easy',
-            ingredients: [
-                { name: `DEBUG_CATCH_ERR`, quantity: String(error).substring(0, 100), category: 'error' }
-            ],
-            nutrition: null
-        };
+        return null;
     }
 }
 
-Deno.serve(async (req: Request) => {
-    if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+    Deno.serve(async (req: Request) => {
+        if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-    try {
-        const { mealName } = await req.json();
-        if (!mealName || typeof mealName !== "string") {
-            return new Response(JSON.stringify({ error: "mealName required" }), { status: 400, headers: corsHeaders });
-        }
-
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-        const { mainDish, sides } = extractMainDish(mealName);
-        const cacheKey = mainDish.toLowerCase().trim();
-
-        // 1. Cache
-        const { data: cached } = await supabase.from("recipe_cache").select("*").eq("meal_name_lower", cacheKey).single();
-        if (cached && cached.ingredients?.length > 0) {
-            console.log(`Cache hit: ${mainDish}`);
-            return new Response(
-                JSON.stringify({
-                    mealName, mainDish, sides,
-                    youtubeVideoId: cached.youtube_video_id,
-                    videoTitle: cached.video_title,
-                    channelName: cached.channel_name,
-                    viewCount: cached.view_count,
-                    thumbnailUrl: cached.thumbnail_url,
-                    description: cached.description,
-                    cookTimeMinutes: cached.cook_time_minutes,
-                    difficulty: cached.difficulty,
-                    ingredients: cached.ingredients,
-                    nutrition: cached.nutrition,
-                    isAiGenerated: cached.is_ai_generated,
-                    fromCache: true
-                }),
-                { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-        }
-
-        // 2. YouTube
-        if (!YOUTUBE_API_KEY) throw new Error("YouTube API not configured");
-        const searchQuery = encodeURIComponent(`${mainDish} recipe`);
-        const youtubeUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video&videoDuration=medium&maxResults=5&key=${YOUTUBE_API_KEY}`;
-        const ytData = await (await fetch(youtubeUrl)).json();
-
-        if (!ytData.items?.length) {
-            return new Response(JSON.stringify({ error: "No video found", mainDish }), { status: 404, headers: corsHeaders });
-        }
-
-        // 3. Stats & Scoring
-        const videoIds = ytData.items.map((v: any) => v.id.videoId).join(',');
-        const statsData = await (await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}&key=${YOUTUBE_API_KEY}`)).json();
-        let bestVideo = ytData.items[0];
-        let bestScore = -Infinity;
-        let bestStats = statsData.items?.[0];
-
-        for (let i = 0; i < ytData.items.length; i++) {
-            const video = ytData.items[i];
-            const stats = statsData.items?.find((s: any) => s.id === video.id.videoId);
-            const score = scoreVideo(video, stats, mainDish);
-            if (score > bestScore) {
-                bestScore = score;
-                bestVideo = video;
-                bestStats = stats;
+        try {
+            const { mealName, skipAi = false, onlyAi = false } = await req.json();
+            if (!mealName || typeof mealName !== "string") {
+                return new Response(JSON.stringify({ error: "mealName required" }), { status: 400, headers: corsHeaders });
             }
-        }
 
-        const videoId = bestVideo.id.videoId;
-        const viewCount = parseInt(bestStats?.statistics?.viewCount || "0");
-        const videoTitle = bestVideo.snippet.title;
-        const description = bestVideo.snippet.description;
+            const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+            const { mainDish, sides } = extractMainDish(mealName);
+            const cacheKey = mainDish.toLowerCase().trim();
 
-        let cookTimeMinutes = extractCookTime(videoTitle, description);
-        let difficulty = inferDifficulty(cookTimeMinutes, videoTitle);
-        let ingredients: StructuredIngredient[] = extractIngredients(description).map(ing => ({
-            name: ing, quantity: '', category: 'other'
-        }));
-        let nutrition: NutritionInfo | null = null;
-        let isAiGenerated = false;
+            // ONLY AI MODE
+            if (onlyAi) {
+                console.log(`Only AI mode for: ${mainDish}`);
+                const aiData = await getAiRecipeDetails(mainDish);
 
-        console.log(`YouTube extraction for ${mainDish}: ing=${ingredients.length}`);
+                if (aiData) {
+                    // Update cache with AI data
+                    await supabase.from("recipe_cache").update({
+                        ingredients: aiData.ingredients,
+                        nutrition: aiData.nutrition,
+                        is_ai_generated: true, // If we used AI, mark it
+                        cook_time_minutes: aiData.cookTimeMinutes, // Update these if present
+                        difficulty: aiData.difficulty
+                    }).eq("meal_name_lower", cacheKey);
 
-        // 6. AI Fallback
-        if (ingredients.length === 0) {
-            console.log(`Calling AI fallback...`);
-            const aiData = await getAiRecipeDetails(mainDish);
-            if (aiData) {
-                if (cookTimeMinutes === null) cookTimeMinutes = aiData.cookTimeMinutes;
-                if (difficulty === null) difficulty = aiData.difficulty;
-                if (ingredients.length === 0 && aiData.ingredients.length > 0) {
-                    ingredients = aiData.ingredients;
-                    isAiGenerated = true;
+                    return new Response(JSON.stringify({ ...aiData, isAiGenerated: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+                } else {
+                    return new Response(JSON.stringify({ error: "AI generation failed" }), { status: 500, headers: corsHeaders });
                 }
-                if (aiData.nutrition) nutrition = aiData.nutrition;
             }
+
+            // 1. Cache
+            const { data: cached } = await supabase.from("recipe_cache").select("*").eq("meal_name_lower", cacheKey).single();
+            // If we have cached ingredients, return immediately (fast path)
+            if (cached && (cached.ingredients?.length > 0)) {
+                console.log(`Cache hit: ${mainDish}`);
+                return new Response(
+                    JSON.stringify({
+                        mealName, mainDish, sides,
+                        youtubeVideoId: cached.youtube_video_id,
+                        videoTitle: cached.video_title,
+                        channelName: cached.channel_name,
+                        viewCount: cached.view_count,
+                        thumbnailUrl: cached.thumbnail_url,
+                        description: cached.description,
+                        cookTimeMinutes: cached.cook_time_minutes,
+                        difficulty: cached.difficulty,
+                        ingredients: cached.ingredients,
+                        nutrition: cached.nutrition,
+                        isAiGenerated: cached.is_ai_generated,
+                        fromCache: true
+                    }),
+                    { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+                );
+            }
+
+            // 2. YouTube Search (if not onlyAi and not cached)
+            if (!YOUTUBE_API_KEY) throw new Error("YouTube API not configured");
+            const searchQuery = encodeURIComponent(`${mainDish} recipe`);
+            const youtubeUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${searchQuery}&type=video&videoDuration=medium&maxResults=5&key=${YOUTUBE_API_KEY}`;
+            const ytData = await (await fetch(youtubeUrl)).json();
+
+            if (!ytData.items?.length) {
+                return new Response(JSON.stringify({ error: "No video found", mainDish }), { status: 404, headers: corsHeaders });
+            }
+
+            // 3. Stats & Scoring
+            const videoIds = ytData.items.map((v: any) => v.id.videoId).join(',');
+            const statsData = await (await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}&key=${YOUTUBE_API_KEY}`)).json();
+            let bestVideo = ytData.items[0];
+            let bestScore = -Infinity;
+            let bestStats = statsData.items?.[0];
+
+            for (let i = 0; i < ytData.items.length; i++) {
+                const video = ytData.items[i];
+                const stats = statsData.items?.find((s: any) => s.id === video.id.videoId);
+                const score = scoreVideo(video, stats, mainDish);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestVideo = video;
+                    bestStats = stats;
+                }
+            }
+
+            const videoId = bestVideo.id.videoId;
+            const viewCount = parseInt(bestStats?.statistics?.viewCount || "0");
+            const videoTitle = bestVideo.snippet.title;
+            const description = bestVideo.snippet.description;
+
+            let cookTimeMinutes = extractCookTime(videoTitle, description);
+            let difficulty = inferDifficulty(cookTimeMinutes, videoTitle);
+            let ingredients: StructuredIngredient[] = extractIngredients(description).map(ing => ({
+                name: ing, quantity: '', category: 'other'
+            }));
+            let nutrition: NutritionInfo | null = null;
+            let isAiGenerated = false;
+
+            console.log(`YouTube extraction for ${mainDish}: ing=${ingredients.length}`);
+
+            // 6. AI Fallback Logic
+            // Only run AI if:
+            // 1. Ingredients not found from description
+            // 2. AND 'skipAi' is FALSE
+            if (ingredients.length === 0) {
+                if (skipAi) {
+                    console.log(`Skipping AI fallback (skipAi=true)`);
+                    // We return what we have (video info), frontend will call 'onlyAi' later
+                } else {
+                    console.log(`Calling AI fallback...`);
+                    const aiData = await getAiRecipeDetails(mainDish);
+                    if (aiData) {
+                        if (cookTimeMinutes === null) cookTimeMinutes = aiData.cookTimeMinutes;
+                        if (difficulty === null) difficulty = aiData.difficulty;
+                        if (ingredients.length === 0 && aiData.ingredients.length > 0) {
+                            ingredients = aiData.ingredients;
+                            isAiGenerated = true;
+                        }
+                        if (aiData.nutrition) nutrition = aiData.nutrition;
+                    }
+                }
+            }
+
+            const result: RecipeResult = {
+                mealName, mainDish, sides, youtubeVideoId: videoId, videoTitle,
+                channelName: bestVideo.snippet.channelTitle, viewCount,
+                thumbnailUrl: bestVideo.snippet.thumbnails.high?.url || bestVideo.snippet.thumbnails.default?.url,
+                description, cookTimeMinutes, difficulty, ingredients, nutrition, isAiGenerated
+            };
+
+            // 7. Cache
+            // Note: If we skipped AI, we still cache the video info. 
+            // Later 'onlyAi' call will update this row with ingredients.
+            await supabase.from("recipe_cache").upsert({
+                meal_name: mainDish,
+                meal_name_lower: cacheKey,
+                youtube_video_id: result.youtubeVideoId,
+                video_title: result.videoTitle,
+                channel_name: result.channelName,
+                view_count: result.viewCount,
+                thumbnail_url: result.thumbnailUrl,
+                description: result.description,
+                cook_time_minutes: cookTimeMinutes,
+                difficulty: difficulty,
+                ingredients: ingredients,
+                nutrition: nutrition,
+                is_ai_generated: isAiGenerated,
+            }, { onConflict: "meal_name_lower" });
+
+            return new Response(JSON.stringify({ ...result, fromCache: false }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+        } catch (error) {
+            console.error("Recipe search error:", error);
+            return new Response(JSON.stringify({ error: "Failed to search for recipe" }), { status: 500, headers: corsHeaders });
         }
-
-        const result: RecipeResult = {
-            mealName, mainDish, sides, youtubeVideoId: videoId, videoTitle,
-            channelName: bestVideo.snippet.channelTitle, viewCount,
-            thumbnailUrl: bestVideo.snippet.thumbnails.high?.url || bestVideo.snippet.thumbnails.default?.url,
-            description, cookTimeMinutes, difficulty, ingredients, nutrition, isAiGenerated
-        };
-
-        // 7. Cache
-        await supabase.from("recipe_cache").upsert({
-            meal_name: mainDish,
-            meal_name_lower: cacheKey,
-            youtube_video_id: result.youtubeVideoId,
-            video_title: result.videoTitle,
-            channel_name: result.channelName,
-            view_count: result.viewCount,
-            thumbnail_url: result.thumbnailUrl,
-            description: result.description,
-            cook_time_minutes: cookTimeMinutes,
-            difficulty: difficulty,
-            ingredients: ingredients,
-            nutrition: nutrition,
-            is_ai_generated: isAiGenerated,
-        }, { onConflict: "meal_name_lower" });
-
-        return new Response(JSON.stringify({ ...result, fromCache: false }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-    } catch (error) {
-        console.error("Recipe search error:", error);
-        return new Response(JSON.stringify({ error: "Failed to search for recipe" }), { status: 500, headers: corsHeaders });
-    }
-});
+    });

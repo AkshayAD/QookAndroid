@@ -16,13 +16,14 @@ interface Props {
     currentProfileId: string;
     history: MealHistoryEntry[];
     onSaveProfile: (profile: PreferenceProfile) => void;
+    onSaveHouseholdSettings?: (settings: HouseholdSettings) => void | Promise<void>;
     onSwitchProfile: (id: string) => void;
     onDeleteProfile?: (id: string) => void;
     onClose: () => void;
     onRerunOnboarding?: () => void;
 }
 
-const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history, onSaveProfile, onSwitchProfile, onDeleteProfile, onClose, onRerunOnboarding }) => {
+const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history, onSaveProfile, onSaveHouseholdSettings, onSwitchProfile, onDeleteProfile, onClose, onRerunOnboarding }) => {
     const { apiKey, modelName } = useSettings();
     const { user } = useAuth();
     const { canAccess } = useFeatureGate();
@@ -74,10 +75,17 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
         setIsSavingHousehold(true);
         try {
             await saveHouseholdSettings(userId, householdSettings);
+            await onSaveHouseholdSettings?.(householdSettings);
             alert('Household settings saved!');
         } catch (err) {
             console.error('Error saving household settings:', err);
-            alert('Failed to save settings.');
+            // DEBUG: Show detailed error to user on Android
+            if (householdSettings) {
+                const isOffline = userId === 'local';
+                alert(`Failed: ${err instanceof Error ? err.message : String(err)}\nUser: ${userId}\nOffline: ${isOffline}`);
+            } else {
+                alert('Failed to save settings.');
+            }
         }
         setIsSavingHousehold(false);
     };
@@ -231,14 +239,19 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
         }
     };
 
-    const handleSave = () => {
-        onSaveProfile({
-            ...localPrefs,
-            id: currentProfileId,
-            name: profileName
-        });
-        onClose();
-    }
+    const handleSave = async () => {
+        if (sidebarMode === 'household') {
+            await handleSaveHouseholdSettings();
+            onClose();
+        } else {
+            onSaveProfile({
+                ...localPrefs,
+                id: currentProfileId,
+                name: profileName
+            });
+            onClose();
+        }
+    };
 
     const TabButton = ({ id, label, icon: Icon }: { id: typeof activeTab, label: string, icon: any }) => (
         <button

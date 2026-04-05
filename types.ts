@@ -33,6 +33,7 @@ export interface GroceryItem {
   item: string;
   quantity: string;
   checked: boolean;
+  homeStatus?: 'none' | 'inventory' | 'staple';
 }
 
 export interface UserPreferences {
@@ -64,6 +65,8 @@ export interface UserPreferences {
   // Display settings
   showPrepReminders?: boolean; // Show prep-ahead reminders on meal cards
   showQuantities?: boolean; // Show quantities in meal descriptions
+  activeInventoryItems?: string[];
+  useInventoryFirst?: boolean;
 }
 
 // General settings that apply to all profiles (household-wide)
@@ -123,6 +126,62 @@ export interface MealHistoryEntry {
   mealName: string;
   type: MealType;
   rating?: 'liked' | 'disliked';
+}
+
+export type InventorySource =
+  | 'manual'
+  | 'fridge_photo'
+  | 'pantry_photo'
+  | 'receipt'
+  | 'order_screenshot'
+  | 'smart_edit';
+
+export type InventoryStatus = 'active' | 'consumed' | 'archived';
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  source: InventorySource;
+  capturedAt: string;
+  expiresAt?: string | null;
+  status: InventoryStatus;
+  confidence?: number | null;
+  familyGroupId?: string | null;
+}
+
+export type PreferenceSignalActionType =
+  | 'regenerate'
+  | 'swap'
+  | 'manual_edit'
+  | 'smart_edit'
+  | 'save_recipe';
+
+export interface PreferenceSignal {
+  id: string;
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | null;
+  actionType: PreferenceSignalActionType;
+  originalValue?: string | null;
+  newValue?: string | null;
+  rawInstruction?: string | null;
+  positiveTags: string[];
+  negativeTags: string[];
+  confidence: number;
+  requiresConfirmation: boolean;
+  appliedAt?: string | null;
+  createdAt: string;
+  familyGroupId?: string | null;
+}
+
+export interface PreferenceSignalSummary {
+  signalIds: string[];
+  meaningfulSignalCount: number;
+  breakfastPreferences: string[];
+  lunchPreferences: string[];
+  dinnerPreferences: string[];
+  dislikes: string[];
+  positiveFocus: string[];
+  negativeFocus: string[];
+  summary: string;
 }
 
 // Map 'YYYY-MM-DD' to DayPlan

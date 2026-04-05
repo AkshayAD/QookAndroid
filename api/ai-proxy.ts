@@ -1,5 +1,12 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
+import {
+    buildMealPlanPrompt as buildSharedMealPlanPrompt,
+    buildSharedGenerationContext,
+    getSeasonalContext,
+    normalizeGeneratedAlternatives,
+    normalizeGeneratedWeeklyPlan,
+} from './promptContext';
 
 /**
  * Server-side AI Proxy for QookCommander
@@ -316,35 +323,6 @@ export default async function handler(req: any, res: any) {
 // AI Action Implementations
 // =====================================================
 
-// ==========================================
-// Helper: Seasonal Context
-// ==========================================
-const getSeasonalContext = (): { season: string; month: string; availableVegetables: string } => {
-    const now = new Date();
-    const month = now.toLocaleString('default', { month: 'long' });
-    const monthNum = now.getMonth();
-
-    let season: string;
-    let vegetables: string;
-
-    // Northern hemisphere seasons (adjust for India's climate)
-    if (monthNum >= 2 && monthNum <= 4) {
-        season = "Spring/Summer (March-May)";
-        vegetables = "tomatoes, cucumbers, bottle gourd (lauki), ridge gourd (tori), bitter gourd (karela), okra (bhindi), brinjal, green beans, capsicum, watermelon, mango, muskmelon";
-    } else if (monthNum >= 5 && monthNum <= 8) {
-        season = "Monsoon/Rainy (June-September)";
-        vegetables = "leafy greens (spinach, fenugreek), corn, mushrooms, bottle gourd, snake gourd, ivy gourd (tindora), drumstick, turmeric leaves, colocasia (arbi), yam";
-    } else if (monthNum >= 9 && monthNum <= 10) {
-        season = "Autumn/Post-Monsoon (October-November)";
-        vegetables = "carrots, beetroot, radish, cauliflower, cabbage, peas, beans, broccoli, sweet potato, turnip, pumpkin";
-    } else {
-        season = "Winter (December-February)";
-        vegetables = "cauliflower, cabbage, peas, carrots, radish (mooli), spinach (palak), mustard greens (sarson), fenugreek (methi), green garlic, broccoli, turnip, beetroot, parsnip";
-    }
-
-    return { season, month, availableVegetables: vegetables };
-};
-
 async function executeGeneratePlan(ai: GoogleGenAI, payload: any, isPro: boolean = false) {
     const { preferences, learningSummary } = payload;
 
@@ -390,7 +368,7 @@ async function executeGeneratePlan(ai: GoogleGenAI, payload: any, isPro: boolean
         required: ["days"],
     };
 
-    const prompt = buildMealPlanPrompt(preferences, learningSummary);
+    const prompt = buildSharedMealPlanPrompt(preferences, learningSummary);
 
     const response = await ai.models.generateContent({
         model,
@@ -402,7 +380,7 @@ async function executeGeneratePlan(ai: GoogleGenAI, payload: any, isPro: boolean
         }
     });
 
-    return JSON.parse(response.text || '{}');
+    return normalizeGeneratedWeeklyPlan(JSON.parse(response.text || '{}'), preferences);
 }
 
 async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boolean = false) {
@@ -428,13 +406,23 @@ async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boole
         - Include accompaniments like "with roti", "served with raita"
         `;
 
+    const context = buildSharedGenerationContext(preferences);
+    if (!context.mealsToPrepare.includes(mealType)) {
+        return { meal: '' };
+    }
     const prompt = `Regenerate the ${mealType} for ${dayName}.
     Current meal to replace: ${currentMeal}
     
     Preferences:
-    Dietary: ${preferences.dietaryType}
-    Must avoid: ${preferences.dislikes?.join(', ') || 'None'}
-    Allergies: ${preferences.allergies?.join(', ') || 'None'}
+    Dietary: ${context.dietaryType}
+    Must avoid: ${context.dislikes.join(', ') || 'None'}
+    Allergies: ${context.allergies.join(', ') || 'None'}
+    Special instructions: ${context.specialInstructions || 'None'}
+    Household size: ${context.householdSize}
+    Portion preference: ${context.portionSize}
+    Pantry staples: ${context.pantryStaples.join(', ') || 'None'}
+    Active inventory: ${context.activeInventoryItems.join(', ') || 'None'}
+    ${context.hasTiffin ? `Tiffin days: ${context.tiffinDays.join(', ')} for ${context.tiffinFor.join(', ') || 'office/school'}` : 'No tiffin requirement'}
     
     Current Season: ${season}
     Available Vegetables: ${availableVegetables}
@@ -512,16 +500,23 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
         }
     };
 
-    // Build comprehensive context
-    const householdSize = preferences?.householdSize || 4;
-    const portionSize = preferences?.portionSize || 'regular';
-    const cuisineStyle = preferences?.cuisineStyle || 'pan-indian';
-    const mealComplexity = preferences?.mealComplexity || 'balanced';
-    const country = preferences?.country || 'India';
+    const context = buildSharedGenerationContext(preferences);
+    const selectedMealTypes = new Set(context.mealsToPrepare);
+    const filteredMealTypes = mealTypes
+        .map((mealType: string) => mealType.toLowerCase())
+        .filter((mealType): mealType is typeof context.mealsToPrepare[number] => selectedMealTypes.has(mealType as typeof context.mealsToPrepare[number]));
+    if (filteredMealTypes.length === 0) {
+        return { options: {} };
+    }
+    const householdSize = context.householdSize;
+    const portionSize = context.portionSize;
+    const cuisineStyle = context.cuisineStyle;
+    const mealComplexity = context.mealComplexity;
+    const country = context.country;
 
     const prompt = `Edit the meal plan based on this instruction: "${instruction}"
     
-    Target Meals to Edit: ${mealTypes.join(", ")}
+    Target Meals to Edit: ${filteredMealTypes.join(", ")}
     
     Current Meals:
     ${Object.entries(currentMeals).map(([k, v]) => `${k}: ${v}`).join('\n')}
@@ -536,11 +531,14 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
     - Meal Complexity: ${mealComplexity}
     
     DIETARY REQUIREMENTS (VERY IMPORTANT):
-    - Diet Type: ${preferences?.dietaryType || 'Standard'}
-    - Foods to AVOID: ${preferences?.dislikes?.join(", ") || 'None'}
-    - ALLERGIES (DO NOT INCLUDE): ${preferences?.allergies?.join(", ") || 'None'}
-    - Health Goals: ${preferences?.healthGoals?.join(", ") || 'None'}
-    - Special Instructions: ${preferences?.specialInstructions || 'None'}
+    - Diet Type: ${context.dietaryType}
+    - Foods to AVOID: ${context.dislikes.join(", ") || 'None'}
+    - ALLERGIES (DO NOT INCLUDE): ${context.allergies.join(", ") || 'None'}
+    - Health Goals: ${context.healthGoals.join(", ") || 'None'}
+    - Special Instructions: ${context.specialInstructions || 'None'}
+    - Pantry staples already at home: ${context.pantryStaples.join(', ') || 'None'}
+    - Active inventory already at home: ${context.activeInventoryItems.join(', ') || 'None'}
+    ${context.hasTiffin ? `- Tiffin requirements: ${context.tiffinDays.join(', ')} for ${context.tiffinFor.join(', ') || 'office/school'}` : ''}
     
     ${languageInstruction}
     
@@ -559,7 +557,7 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
     • Beverage/Salad"
     
     IMPORTANT: Provide EXACTLY 3 different options for EACH requested meal type.
-    Only include the meal types that were requested: ${mealTypes.join(", ")}.
+    Only include the meal types that were requested: ${filteredMealTypes.join(", ")}.
     Each option should match the FORMAT of the original meal while applying the change.
     Use seasonal ingredients when possible: ${availableVegetables}
     
@@ -579,7 +577,7 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
 
     // Wrap the response in options key for backward compatibility with frontend
     const rawResult = JSON.parse(response.text || '{}');
-    return { options: rawResult };
+    return { options: normalizeGeneratedAlternatives(rawResult, { mealsToPrepare: filteredMealTypes }) };
 }
 
 async function executeGenerateGrocery(ai: GoogleGenAI, payload: any) {
@@ -606,17 +604,20 @@ async function executeGenerateGrocery(ai: GoogleGenAI, payload: any) {
         required: ["items"],
     };
 
-    // Build day-by-day breakdown
+    const context = buildSharedGenerationContext(preferences);
     const dayBreakdown = meals.map((m: any) => {
         const day = m.day || m.date;
+        const breakfast = context.mealsToPrepare.includes('breakfast') ? m.breakfast : '';
+        const lunch = context.mealsToPrepare.includes('lunch') ? m.lunch : '';
+        const dinner = context.mealsToPrepare.includes('dinner') ? m.dinner : '';
         return `${day}:
-  - Breakfast: ${m.breakfast}
-  - Lunch: ${m.lunch}
-  - Dinner: ${m.dinner}`;
+  - Breakfast: ${breakfast}
+  - Lunch: ${lunch}
+  - Dinner: ${dinner}`;
     }).join('\n\n');
-
-    const householdSize = preferences.householdSize || 4;
-    const portionSize = preferences.portionSize || 'regular';
+    const householdSize = context.householdSize;
+    const portionSize = context.portionSize;
+    const excludedItems = context.kitchenMemoryItems;
 
     const prompt = `Generate a grocery list for the following weekly meal plan.
 
@@ -633,14 +634,21 @@ HOUSEHOLD CONTEXT:
 - Household size: ${householdSize} people
 - Portion preference: ${portionSize} (${portionSize === 'light' ? 'reduce by 20%' : portionSize === 'hearty' ? 'increase by 30%' : 'standard'})
 
-ITEMS TO EXCLUDE (already in pantry):
-${preferences.pantryStaples?.join(', ') || 'Basic spices, salt, oil, water'}
+ITEMS TO EXCLUDE (already in pantry or inventory):
+${excludedItems.join(', ') || 'Basic spices, salt, oil, water'}
+
+PANTRY STAPLES ALWAYS ON HAND:
+${context.pantryStaples.join(', ') || 'None'}
+
+ACTIVE INVENTORY TO USE FIRST:
+${context.activeInventoryItems.join(', ') || 'None'}
 
 INSTRUCTIONS:
 1. Be CONSISTENT - same meal should always need same base ingredients
 2. Include forDays (e.g., ["Monday", "Wednesday"]) and forMeals (e.g., ["Dal Tadka", "Poha"])
 3. Round to practical shopping amounts (500g, 1kg, 1 dozen, 1 bunch)
 4. Categories: Vegetables, Fruits, Dairy, Grains & Pulses, Proteins, Spices, Oils & Condiments, Other
+5. NEVER add pantry staples or active inventory items unless the plan clearly needs more than a normal on-hand amount
 
 Output a consolidated grocery list with day/meal tracking.`;
 
@@ -710,10 +718,11 @@ async function executeValidateKey(ai: GoogleGenAI) {
 
 async function executeGenerateAlternatives(ai: GoogleGenAI, payload: any, isPro: boolean = false) {
     const { preferences, currentPlan } = payload;
-    const country = preferences?.country || 'India';
+    const context = buildSharedGenerationContext(preferences);
+    const country = context.country;
     const now = new Date();
     const month = now.toLocaleString('default', { month: 'long' });
-    const isHindi = preferences?.language === 'Hindi';
+    const isHindi = context.language === 'Hindi';
 
     // Pro users get better model and more alternatives
     const model = isPro ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
@@ -743,14 +752,18 @@ async function executeGenerateAlternatives(ai: GoogleGenAI, payload: any, isPro:
         ? 'Output ALL meal names in HINDI DEVANAGARI script.'
         : 'Output meal names in English with descriptive accompaniments.';
 
-    const prompt = `Generate ${alternativesCount} unique meal alternatives for each of breakfast, lunch, and dinner.
+    const selectedMeals = context.mealsToPrepare;
+    const selectedMealList = selectedMeals.join(', ');
+    const prompt = `Generate ${alternativesCount} unique meal alternatives only for these selected meal types: ${selectedMealList}.
 
         LOCATION: ${country}
     SEASON: ${month} (Use seasonal ingredients available in ${country} now)
-    DIETARY: ${preferences?.dietaryType || 'Vegetarian'}
-    DISLIKES: ${preferences?.dislikes?.join(', ') || 'None'}
-    ALLERGIES: ${preferences?.allergies?.join(', ') || 'None'}
-SPECIAL INSTRUCTIONS: ${preferences?.specialInstructions || 'None'}
+    DIETARY: ${context.dietaryType}
+    DISLIKES: ${context.dislikes.join(', ') || 'None'}
+    ALLERGIES: ${context.allergies.join(', ') || 'None'}
+SPECIAL INSTRUCTIONS: ${context.specialInstructions || 'None'}
+PANTRY STAPLES: ${context.pantryStaples.join(', ') || 'None'}
+ACTIVE INVENTORY: ${context.activeInventoryItems.join(', ') || 'None'}
 ${languageInstruction}
 
 DO NOT REPEAT these meals which are already in the plan:
@@ -758,26 +771,27 @@ ${existingMeals.slice(0, 21).join(', ') || 'None'}
 
 CRITICAL MEAL FORMATTING - EACH ALTERNATIVE MUST USE THIS FORMAT:
 Each meal should be a CLEAN MULTI-LINE list with bullet points (•):
-"• Main Dish (quantity for ${preferences?.householdSize || 4} people)
+"• Main Dish (quantity for ${context.householdSize} people)
 • Side 1 (quantity)
 • Side 2 (quantity)
 • Beverage or Salad"
 
 EXAMPLE with quantities:
-"• Masala Dosa (${preferences?.householdSize || 4} pieces)
+"• Masala Dosa (${context.householdSize} pieces)
 • Sambar (1 bowl)
 • Coconut Chutney (100g)
-• Filter Coffee (${preferences?.householdSize || 4} cups)"
+• Filter Coffee (${context.householdSize} cups)"
 
 RULES:
 1. Start each item with • bullet
 2. One item per line with quantity in parentheses
 3. 3-5 items per meal
-4. ALWAYS include quantities for household of ${preferences?.householdSize || 4} people
+4. ALWAYS include quantities for household of ${context.householdSize} people
 5. Combine salad ingredients: "Onion Cucumber Salad (1 bowl)" NOT separate items
 
-Generate ${alternativesCount} unique, varied, practical, and delicious alternatives per category.
-All meals must be appropriate for ${country} cuisine, include quantities, and respect all dietary preferences.`;
+Generate ${alternativesCount} unique, varied, practical, and delicious alternatives for each selected category.
+For any unselected meal type, return an empty array.
+All meals must be appropriate for ${country} cuisine, include quantities, respect all dietary preferences, and prefer using pantry staples + active inventory when practical.`;
 
     const response = await ai.models.generateContent({
         model,
@@ -789,7 +803,10 @@ All meals must be appropriate for ${country} cuisine, include quantities, and re
         }
     });
 
-    return JSON.parse(response.text || '{"breakfast":[],"lunch":[],"dinner":[]}');
+    return normalizeGeneratedAlternatives(
+        JSON.parse(response.text || '{"breakfast":[],"lunch":[],"dinner":[]}'),
+        preferences
+    );
 }
 
 // =====================================================
@@ -834,6 +851,13 @@ ${!mealsToGenerate.includes('lunch') ? '- lunch: MUST be empty string ""' : ''}
 ${!mealsToGenerate.includes('dinner') ? '- dinner: MUST be empty string ""' : ''}
 ` : '';
 
+    const activeInventoryItems = Array.from(new Set([
+        ...(preferences.activeInventoryItems || []),
+        ...(learningSummary?.activeInventoryItems || []),
+    ])).filter(Boolean);
+    const softPositiveSignals = learningSummary?.softPositiveSignals || [];
+    const softNegativeSignals = learningSummary?.softNegativeSignals || [];
+
     let learningContext = '';
     if (learningSummary?.totalMealCount > 0) {
         learningContext = `
@@ -842,6 +866,24 @@ Breakfast patterns: ${learningSummary.acceptedBreakfasts?.slice(0, 8).join(', ')
 Lunch patterns: ${learningSummary.acceptedLunches?.slice(0, 8).join(', ') || 'N/A'}
 Dinner patterns: ${learningSummary.acceptedDinners?.slice(0, 8).join(', ') || 'N/A'}
 DO NOT REPEAT: ${learningSummary.recentMeals?.join(', ') || 'N/A'}
+`;
+    }
+
+    if (softPositiveSignals.length > 0 || softNegativeSignals.length > 0) {
+        learningContext += `
+SOFT SIGNALS FROM RECENT ACTIONS:
+Lean into: ${softPositiveSignals.slice(0, 8).join(', ') || 'None'}
+Reduce or avoid: ${softNegativeSignals.slice(0, 8).join(', ') || 'None'}
+`;
+    }
+
+    if (activeInventoryItems.length > 0) {
+        learningContext += `
+ACTIVE INVENTORY TO PRIORITIZE:
+${activeInventoryItems.join(', ')}
+- Prefer meals that use these items first, especially perishables
+- Treat these ingredients as already available in the kitchen
+- Help the user consume on-hand items before suggesting new purchases
 `;
     }
 
@@ -1157,7 +1199,7 @@ async function executeGetLearningSuggestions(ai: GoogleGenAI, payload: any) {
         `;
 
     const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
         config: {
             responseMimeType: "application/json",
@@ -1208,7 +1250,7 @@ async function executeOptimizePreferences(ai: GoogleGenAI, payload: any) {
     `;
 
     const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash-lite",
         contents: prompt,
         config: {
             responseMimeType: "application/json",

@@ -6,6 +6,7 @@ interface StepProps {
     data: OnboardingData;
     updateData: (updates: Partial<OnboardingData>) => void;
     onNext: () => void;
+    isRerun?: boolean;
 }
 
 const MEAL_OPTIONS = [

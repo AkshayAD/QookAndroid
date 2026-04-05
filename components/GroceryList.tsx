@@ -1,12 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { GroceryItem, Schedule, SavedGroceryList } from '../types';
-import { CheckSquare, Share2, Calendar, Loader2, ShoppingCart, Save, Clock, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CheckSquare, Share2, Calendar, Loader2, ShoppingCart, Save, Clock, Trash2, ChevronDown, ChevronUp, Home, Plus } from 'lucide-react';
 import { format, addDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
+import { GroceryItem, Schedule, SavedGroceryList } from '../types';
 import * as supabaseService from '../services/supabaseService';
 
 interface Props {
   items: GroceryItem[];
   onToggle: (index: number) => void;
+  onDeleteItem?: (index: number) => void;
+  onAddItem?: (item: { item: string; quantity: string; category: string }) => void;
+  onRememberItem?: (index: number, target: 'inventory' | 'staple') => Promise<void> | void;
   schedule?: Schedule;
   onGenerateFromDates?: (meals: { date: string; breakfast: string; lunch: string; dinner: string }[]) => Promise<void>;
   loading?: boolean;
@@ -19,17 +22,22 @@ interface Props {
 const GroceryList: React.FC<Props> = ({
   items,
   onToggle,
+  onDeleteItem,
+  onAddItem,
+  onRememberItem,
   schedule,
   onGenerateFromDates,
   loading,
   onLoadSavedList,
   userId = 'local',
   currentDateRange,
-  onShare
+  onShare,
 }) => {
-  const categories = Array.from(new Set(items.map(i => i.category)));
+  const categories = useMemo(
+    () => Array.from(new Set(items.map((item) => item.category || 'Other'))),
+    [items]
+  );
 
-  // Date range selection - defaults to today + 6 days
   const today = new Date();
   const defaultStartDate = format(today, 'yyyy-MM-dd');
   const defaultEndDate = format(addDays(today, 6), 'yyyy-MM-dd');
@@ -39,10 +47,11 @@ const GroceryList: React.FC<Props> = ({
   const [showHistory, setShowHistory] = useState(false);
   const [savedLists, setSavedLists] = useState<SavedGroceryList[]>([]);
   const [saving, setSaving] = useState(false);
+  const [rememberMenuIndex, setRememberMenuIndex] = useState<number | null>(null);
+  const [draftItem, setDraftItem] = useState({ item: '', quantity: '', category: 'Produce' });
 
-  // Load history on mount
   useEffect(() => {
-    loadHistory();
+    void loadHistory();
   }, [userId]);
 
   const loadHistory = async () => {
@@ -56,11 +65,12 @@ const GroceryList: React.FC<Props> = ({
       onShare(items, range);
       return;
     }
-    const text = items.map(i => `${i.checked ? '[x]' : '[ ]'} ${i.item} (${i.quantity})`).join('\n');
+
+    const text = items.map((item) => `${item.checked ? '[x]' : '[ ]'} ${item.item} (${item.quantity})`).join('\n');
     if (navigator.share) {
       navigator.share({
         title: 'CookCommander Grocery List',
-        text: text + '\n\nPlanned via QookCommander - free AI meal planner',
+        text: `${text}\n\nPlanned via QookCommander - free AI meal planner`,
       });
     } else {
       navigator.clipboard.writeText(text);
@@ -89,14 +99,12 @@ const GroceryList: React.FC<Props> = ({
   };
 
   const handleLoadList = (list: SavedGroceryList) => {
-    if (onLoadSavedList) {
-      onLoadSavedList(list.items);
-    }
+    onLoadSavedList?.(list.items);
     setShowHistory(false);
   };
 
-  const handleDeleteList = async (listId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteList = async (listId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
     if (!confirm('Delete this saved list?')) return;
 
     await supabaseService.deleteGroceryList(listId, userId);
@@ -119,7 +127,6 @@ const GroceryList: React.FC<Props> = ({
       return;
     }
 
-    // Collect meals for the date range
     const meals: { date: string; breakfast: string; lunch: string; dinner: string }[] = [];
     let current = start;
     while (current <= end) {
@@ -129,22 +136,20 @@ const GroceryList: React.FC<Props> = ({
         date: dateKey,
         breakfast: dayPlan?.breakfast || '',
         lunch: dayPlan?.lunch || '',
-        dinner: dayPlan?.dinner || ''
+        dinner: dayPlan?.dinner || '',
       });
       current = addDays(current, 1);
     }
 
-    // Check if there are any meals in this range
-    const hasMeals = meals.some(d => d.breakfast || d.lunch || d.dinner);
+    const hasMeals = meals.some((day) => day.breakfast || day.lunch || day.dinner);
     if (!hasMeals) {
-      alert('No meals scheduled for this date range. Please add meals to the calendar first.');
+      alert('No meals scheduled for this date range. Please add meals in the grocery calendar tab first.');
       return;
     }
 
-    onGenerateFromDates(meals);
+    void onGenerateFromDates(meals);
   };
 
-  // Quick presets for date selection
   const setThisWeek = () => {
     setStartDate(format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
     setEndDate(format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
@@ -161,9 +166,33 @@ const GroceryList: React.FC<Props> = ({
     setEndDate(format(addDays(today, 6), 'yyyy-MM-dd'));
   };
 
+  const handleAddDraftItem = () => {
+    const nextItem = draftItem.item.trim();
+    if (!nextItem) {
+      return;
+    }
+
+    onAddItem?.({
+      item: nextItem,
+      quantity: draftItem.quantity.trim() || 'As needed',
+      category: draftItem.category.trim() || 'Other',
+    });
+
+    setDraftItem({ item: '', quantity: '', category: draftItem.category || 'Produce' });
+  };
+
+  const statusLabel = (item: GroceryItem) => {
+    if (item.homeStatus === 'inventory') {
+      return 'At home now';
+    }
+    if (item.homeStatus === 'staple') {
+      return 'Saved as staple';
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-4">
-      {/* Date Range Selector */}
       {onGenerateFromDates && schedule && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
@@ -177,7 +206,7 @@ const GroceryList: React.FC<Props> = ({
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(event) => setStartDate(event.target.value)}
                 className="w-full px-3 py-2 min-h-[44px] border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
               />
             </div>
@@ -186,7 +215,7 @@ const GroceryList: React.FC<Props> = ({
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={(event) => setEndDate(event.target.value)}
                 className="w-full px-3 py-2 min-h-[44px] border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500"
               />
             </div>
@@ -210,7 +239,6 @@ const GroceryList: React.FC<Props> = ({
             </button>
           </div>
 
-          {/* Quick Presets */}
           <div className="flex flex-wrap gap-2 mt-3">
             <button
               onClick={setThisWeek}
@@ -234,7 +262,6 @@ const GroceryList: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Saved Lists History */}
       {savedLists.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <button
@@ -251,7 +278,7 @@ const GroceryList: React.FC<Props> = ({
 
           {showHistory && (
             <div className="border-t border-gray-100 max-h-[200px] overflow-y-auto">
-              {savedLists.map(list => (
+              {savedLists.map((list) => (
                 <div
                   key={list.id}
                   onClick={() => handleLoadList(list)}
@@ -262,7 +289,7 @@ const GroceryList: React.FC<Props> = ({
                     <p className="text-xs text-gray-500">{list.items.length} items • {format(new Date(list.createdAt), 'MMM d, h:mm a')}</p>
                   </div>
                   <button
-                    onClick={(e) => handleDeleteList(list.id, e)}
+                    onClick={(event) => handleDeleteList(list.id, event)}
                     className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -274,15 +301,73 @@ const GroceryList: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Grocery List */}
+      <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-4 space-y-3">
+        <div className="flex items-start gap-3">
+          <CheckSquare className="w-5 h-5 text-blue-600 mt-0.5" />
+          <div>
+            <p className="font-semibold text-gray-800">How this grocery list works</p>
+            <p className="text-sm text-gray-600 mt-1">
+              Checkboxes mark items you bought for this trip. The home icon lets you remember an item in your kitchen, either as something you have now or as a pantry staple for future plans.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700 font-medium">
+            <Home className="w-3.5 h-3.5" />
+            Save to home or pantry
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1.5 text-gray-600 font-medium">
+            <Trash2 className="w-3.5 h-3.5" />
+            Remove from this list
+          </span>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <p className="font-semibold text-gray-800">Add a grocery item manually</p>
+            <p className="text-sm text-gray-500">Useful when Qook missed something or you want to add household basics.</p>
+          </div>
+        </div>
+        <div className="grid md:grid-cols-[1.6fr_1fr_1fr_auto] gap-3">
+          <input
+            type="text"
+            value={draftItem.item}
+            onChange={(event) => setDraftItem((current) => ({ ...current, item: event.target.value }))}
+            placeholder="Item name"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          />
+          <input
+            type="text"
+            value={draftItem.quantity}
+            onChange={(event) => setDraftItem((current) => ({ ...current, quantity: event.target.value }))}
+            placeholder="Quantity"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          />
+          <input
+            type="text"
+            value={draftItem.category}
+            onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))}
+            placeholder="Category"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          />
+          <button
+            onClick={handleAddDraftItem}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Add
+          </button>
+        </div>
+      </div>
+
       {items.length === 0 ? (
         <div className="text-center p-8 text-gray-500 bg-white rounded-xl shadow-sm border border-gray-100">
           <ShoppingCart className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="font-medium">No grocery list generated yet.</p>
           <p className="text-sm mt-1">
-            {onGenerateFromDates
-              ? "Select a date range above and click 'Generate List'"
-              : "Create a meal plan first."}
+            {onGenerateFromDates ? "Select a date range above and click 'Generate List'" : 'Create a meal plan first.'}
           </p>
         </div>
       ) : (
@@ -293,7 +378,6 @@ const GroceryList: React.FC<Props> = ({
                 <CheckSquare className="w-5 h-5 text-orange-600" /> Grocery List
                 <span className="text-sm font-normal text-gray-500">({items.length} items)</span>
               </h2>
-              {/* Desktop buttons */}
               <div className="hidden sm:flex items-center gap-2">
                 <button
                   onClick={handleSaveList}
@@ -308,7 +392,6 @@ const GroceryList: React.FC<Props> = ({
                 </button>
               </div>
             </div>
-            {/* Mobile prominent buttons */}
             <div className="flex gap-2 sm:hidden">
               <button
                 onClick={handleSaveList}
@@ -329,21 +412,97 @@ const GroceryList: React.FC<Props> = ({
           </div>
 
           <div className="p-4 space-y-6 max-h-[600px] overflow-y-auto">
-            {categories.map(category => (
+            {categories.map((category) => (
               <div key={category}>
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{category}</h3>
                 <ul className="space-y-2">
                   {items.map((item, idx) => {
-                    if (item.category !== category) return null;
+                    if ((item.category || 'Other') !== category) return null;
+
+                    const status = statusLabel(item);
+                    const isMenuOpen = rememberMenuIndex === idx;
+
                     return (
-                      <li key={idx} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer" onClick={() => onToggle(idx)}>
-                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${item.checked ? 'bg-orange-500 border-orange-500' : 'border-gray-300'}`}>
-                          {item.checked && <span className="text-white text-xs">✓</span>}
+                      <li key={`${category}-${idx}`} className="rounded-xl border border-gray-100 bg-white">
+                        <div className="flex items-start gap-3 p-3">
+                          <button
+                            onClick={() => onToggle(idx)}
+                            className="mt-0.5 shrink-0"
+                            title={item.checked ? 'Mark as not bought' : 'Mark as bought'}
+                          >
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center ${item.checked ? 'bg-orange-500 border-orange-500' : 'border-gray-300 bg-white'}`}>
+                              {item.checked && <span className="text-white text-xs">✓</span>}
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => onToggle(idx)}
+                            className="flex-1 text-left"
+                          >
+                            <div className={item.checked ? 'opacity-50 line-through' : ''}>
+                              <div className="font-medium text-gray-800">{item.item}</div>
+                              <div className="text-sm text-gray-500 mt-0.5">{item.quantity}</div>
+                            </div>
+                            {status && (
+                              <span className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${item.homeStatus === 'staple' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                <Home className="w-3.5 h-3.5" />
+                                {status}
+                              </span>
+                            )}
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setRememberMenuIndex(isMenuOpen ? null : idx);
+                              }}
+                              className="p-2 rounded-lg text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                              title="Remember this in your kitchen"
+                            >
+                              <Home className="w-4 h-4" />
+                            </button>
+                            {onDeleteItem && (
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onDeleteItem(idx);
+                                  setRememberMenuIndex((current) => (current === idx ? null : current));
+                                }}
+                                className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title="Delete item"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div className={item.checked ? 'opacity-50 line-through' : ''}>
-                          <span className="font-medium text-gray-800">{item.item}</span>
-                          <span className="text-gray-500 text-sm ml-2">- {item.quantity}</span>
-                        </div>
+
+                        {isMenuOpen && (
+                          <div className="border-t border-gray-100 px-3 py-3 bg-gray-50">
+                            <p className="text-xs font-medium text-gray-500 mb-2">Remember this item in your kitchen as:</p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => {
+                                  void onRememberItem?.(idx, 'inventory');
+                                  setRememberMenuIndex(null);
+                                }}
+                                className="rounded-full bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                              >
+                                At home now
+                              </button>
+                              <button
+                                onClick={() => {
+                                  void onRememberItem?.(idx, 'staple');
+                                  setRememberMenuIndex(null);
+                                }}
+                                className="rounded-full bg-amber-500 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-600 transition-colors"
+                              >
+                                Pantry staple
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </li>
                     );
                   })}
