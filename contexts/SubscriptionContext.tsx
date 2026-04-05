@@ -1,21 +1,26 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { useFamily } from './FamilyContext';
+import { useSettings } from './SettingsContext';
 import {
     getUserSubscription,
     getUserCredits,
     getSubscriptionPlans,
-    consumeCredits,
+    getEnabledFeatureMatrix,
     checkRateLimit,
     claimWeeklyBonus,
     createTrialSubscription,
-    getLaunchOfferSettings
+    getLaunchOfferSettings,
+    FeatureAccessMatrix,
 } from '../services/subscriptionService';
 import { SubscriptionPlan, UserSubscription, UserCredits } from '../types/subscription';
+import { ACTION_FEATURES, canAccessFeature } from '../lib/billing/featureAccess';
 
 interface SubscriptionContextType {
     subscription: UserSubscription | null;
     credits: UserCredits | null;
     plans: SubscriptionPlan[];
+    featureMatrix: FeatureAccessMatrix | null;
     loading: boolean;
     isTrialActive: boolean;
     isLaunchTrial: boolean;
@@ -32,22 +37,52 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
+    const { isFamilyModeActive, familyGroup, setFamilyModeActive } = useFamily();
+    const { apiKey } = useSettings();
     const [subscription, setSubscription] = useState<UserSubscription | null>(null);
     const [credits, setCredits] = useState<UserCredits | null>(null);
     const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+    const [featureMatrix, setFeatureMatrix] = useState<FeatureAccessMatrix | null>(null);
     const [loading, setLoading] = useState(true);
-    const [launchOfferTier, setLaunchOfferTier] = useState<string>('family_pro');
+    const [launchOfferTier, setLaunchOfferTier] = useState<string>('pro');
+    const activeFamilyGroupId = isFamilyModeActive && familyGroup?.id ? familyGroup.id : null;
 
-    // Load subscription data
+    const loadCreditSummary = useCallback(async (userId: string, familyGroupId: string | null): Promise<UserCredits | null> => {
+        const candidateGroupIds = familyGroupId ? [familyGroupId, null] : [null];
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+            for (const candidateGroupId of candidateGroupIds) {
+                const summary = await getUserCredits(userId, candidateGroupId);
+
+                if (!summary) {
+                    continue;
+                }
+
+                if (familyGroupId && !summary.family_mode) {
+                    setFamilyModeActive(false);
+                }
+
+                return summary;
+            }
+
+            if (attempt === 0) {
+                await new Promise((resolve) => window.setTimeout(resolve, 300));
+            }
+        }
+
+        return null;
+    }, [setFamilyModeActive]);
+
     useEffect(() => {
         const loadSubscriptionData = async () => {
             setLoading(true);
             try {
-                // Load plans first (public data)
                 const loadedPlans = await getSubscriptionPlans();
                 setPlans(loadedPlans);
 
-                // Load launch offer settings
+                const loadedFeatureMatrix = await getEnabledFeatureMatrix();
+                setFeatureMatrix(loadedFeatureMatrix);
+
                 const launchOffer = await getLaunchOfferSettings();
                 if (launchOffer?.effective_tier) {
                     setLaunchOfferTier(launchOffer.effective_tier);
@@ -56,31 +91,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
                 if (!user?.id) {
                     setSubscription(null);
                     setCredits(null);
-                    setLoading(false);
                     return;
                 }
 
-                // Load user subscription
                 let sub = await getUserSubscription(user.id);
 
-                // If no subscription exists, create trial
                 if (!sub) {
                     await createTrialSubscription(user.id);
                     sub = await getUserSubscription(user.id);
                 }
+
                 setSubscription(sub);
 
-                // Load credits
-                const userCredits = await getUserCredits(user.id);
-                setCredits(userCredits);
-
-                // Try to claim weekly bonus
-                await claimWeeklyBonus(user.id);
-
-                // Refresh credits after bonus claim
-                const updatedCredits = await getUserCredits(user.id);
-                setCredits(updatedCredits);
-
+                const summary = await loadCreditSummary(user.id, activeFamilyGroupId);
+                setCredits((previous) => summary ?? previous);
             } catch (error) {
                 console.error('Error loading subscription:', error);
             } finally {
@@ -89,19 +113,20 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         };
 
         loadSubscriptionData();
-    }, [user?.id]);
+    }, [user?.id, activeFamilyGroupId, loadCreditSummary]);
 
-    // Listen for refresh-credits event from trust actions
     useEffect(() => {
         const handleRefreshCredits = () => {
             if (user?.id) {
-                getUserCredits(user.id).then(setCredits);
+                loadCreditSummary(user.id, activeFamilyGroupId).then((summary) => {
+                    setCredits((previous) => summary ?? previous);
+                });
             }
         };
 
         window.addEventListener('refresh-credits', handleRefreshCredits);
         return () => window.removeEventListener('refresh-credits', handleRefreshCredits);
-    }, [user?.id]);
+    }, [user?.id, activeFamilyGroupId, loadCreditSummary]);
 
     const isTrialActive = Boolean(
         subscription?.plan_id === 'free' &&
@@ -109,62 +134,67 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         new Date(subscription.trial_ends_at) > new Date()
     );
 
-    // Launch trial = free plan with active trial
     const isLaunchTrial = isTrialActive;
-
-    // Calculate days remaining
     const trialDaysRemaining = isTrialActive && subscription?.trial_ends_at
         ? Math.max(0, Math.ceil((new Date(subscription.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : 0;
+    const effectiveTier = isLaunchTrial ? launchOfferTier : (credits?.effective_tier || subscription?.plan_id || 'free');
 
-    // Effective tier: during launch trial, use family_pro features
-    const effectiveTier = isLaunchTrial ? launchOfferTier : (subscription?.plan_id || 'free');
+    const isUsingByok = Boolean(
+        credits?.byok_enabled &&
+        credits?.billing_preference === 'byok' &&
+        apiKey?.trim()
+    );
 
     const canGenerate = (type: 'meal' | 'grocery' | 'edit' | 'regen'): boolean => {
-        if (!credits) return false;
-
-        // BYOK users can always generate
-        if (credits.byok_enabled) return true;
-
-        switch (type) {
-            case 'meal':
-                return credits.total_meal_credits > 0;
-            case 'grocery':
-                return credits.total_grocery_credits > 0;
-            case 'edit':
-                return credits.total_edit_credits > 0;
-            case 'regen':
-                return credits.total_regen_credits > 0;
-            default:
-                return false;
+        if (!credits) {
+            return false;
         }
+
+        if (type === 'meal') {
+            return isUsingByok || credits.total_credits > 0;
+        }
+
+        return canAccessFeature(ACTION_FEATURES[type], effectiveTier, featureMatrix ?? undefined);
     };
 
-    const useCredits = async (type: 'meal_generation' | 'grocery_generation' | 'smart_edit' | 'single_regen'): Promise<boolean> => {
-        if (!user?.id) return false;
+    const useCredits = async (
+        _type: 'meal_generation' | 'grocery_generation' | 'smart_edit' | 'single_regen'
+    ): Promise<boolean> => {
+        if (!user?.id) {
+            return false;
+        }
 
-        // Check BYOK - no credits needed
-        if (credits?.byok_enabled) return true;
+        if (isUsingByok) {
+            return true;
+        }
 
-        // NOTE: Credits are now consumed server-side by ai-proxy
-        // This function just refreshes the local credit state after generation
         await refreshCredits();
         return true;
     };
 
     const checkRate = async (action: string): Promise<boolean> => {
-        if (!user?.id) return true;
-        return checkRateLimit(user.id, action, 15); // 15 requests per minute
+        if (!user?.id) {
+            return true;
+        }
+
+        return checkRateLimit(user.id, action, 15);
     };
 
     const refreshCredits = async () => {
-        if (!user?.id) return;
-        const userCredits = await getUserCredits(user.id);
-        setCredits(userCredits);
+        if (!user?.id) {
+            return;
+        }
+
+        const summary = await loadCreditSummary(user.id, activeFamilyGroupId);
+        setCredits((previous) => summary ?? previous);
     };
 
     const claimBonus = async (): Promise<boolean> => {
-        if (!user?.id) return false;
+        if (!user?.id) {
+            return false;
+        }
+
         const success = await claimWeeklyBonus(user.id);
         if (success) {
             await refreshCredits();
@@ -177,6 +207,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
             subscription,
             credits,
             plans,
+            featureMatrix,
             loading,
             isTrialActive,
             isLaunchTrial,
@@ -196,11 +227,11 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 export function useSubscription() {
     const context = useContext(SubscriptionContext);
     if (context === undefined) {
-        // Return default values for non-subscription contexts
         return {
             subscription: null,
             credits: null,
             plans: [],
+            featureMatrix: null,
             loading: false,
             isTrialActive: false,
             isLaunchTrial: false,

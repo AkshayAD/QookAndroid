@@ -21,8 +21,8 @@ const ACTION_ICONS: Record<TrustActionType, React.ReactNode> = {
     signup: <Gift className="w-4 h-4" />,
     complete_profile: <Check className="w-4 h-4" />,
     add_phone: <Phone className="w-4 h-4" />,
-    return_24h: <Calendar className="w-4 h-4" />,
-    first_manual_save: <Save className="w-4 h-4" />,
+    generate_second_menu: <Calendar className="w-4 h-4" />,
+    share_menu_commands: <Save className="w-4 h-4" />,
     install_pwa: <Smartphone className="w-4 h-4" />
 };
 

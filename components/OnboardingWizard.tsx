@@ -9,10 +9,7 @@ import HouseholdStep from './onboarding/HouseholdStep';
 import DietTypeStep from './onboarding/DietTypeStep';
 import NonVegStep from './onboarding/NonVegStep';
 import MealsStep from './onboarding/MealsStep';
-import TiffinStep from './onboarding/TiffinStep';
-import ComplexityStep from './onboarding/ComplexityStep';
 import DislikesStep from './onboarding/DislikesStep';
-import HealthGoalsStep from './onboarding/HealthGoalsStep';
 import SpecialInstructionsStep from './onboarding/SpecialInstructionsStep';
 
 interface OnboardingWizardProps {
@@ -71,10 +68,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, initial
 
         steps.push(
             { id: 'meals', component: MealsStep, title: 'Meals' },
-            { id: 'tiffin', component: TiffinStep, title: 'Tiffin' },
-            { id: 'complexity', component: ComplexityStep, title: 'Style' },
             { id: 'dislikes', component: DislikesStep, title: 'Dislikes' },
-            { id: 'health', component: HealthGoalsStep, title: 'Health' },
             { id: 'special', component: SpecialInstructionsStep, title: 'More' }
         );
 
@@ -199,13 +193,13 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, initial
                         >
                             {isSubmitting ? (
                                 <>
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                    Creating your plan...
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                    Saving your setup...
                                 </>
                             ) : isLastStep ? (
                                 <>
                                     <Check className="w-5 h-5" />
-                                    Create My Plan!
+                                    Continue to My Kitchen
                                 </>
                             ) : (
                                 <>

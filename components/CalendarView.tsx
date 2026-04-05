@@ -208,7 +208,7 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
 
     return (
         <div className="grid lg:grid-cols-3 gap-4 lg:gap-6 lg:h-full small-screen-zoom">
-            <style jsx global>{`
+            <style>{`
                 @media (max-width: 350px) {
                     .small-screen-zoom {
                         zoom: 0.85;

@@ -18,6 +18,10 @@ dist-ssr
 .env.*.local
 .env.development
 .env.production
+android/keystore.properties
+android/app/upload-keystore.jks
+release_builds/
+analysis/
 
 # Editor directories and files
 .vscode/*

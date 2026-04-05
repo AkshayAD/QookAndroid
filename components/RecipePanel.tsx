@@ -39,13 +39,15 @@ interface RecipePanelProps {
     mealName: string | null;
     onClose: () => void;
     isOpen: boolean;
+    onRecipeSavedPreferenceSignal?: (mealName: string) => Promise<void> | void;
 }
 
-const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) => {
+const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen, onRecipeSavedPreferenceSignal }) => {
     const { isFamilyModeActive, familyGroup } = useFamily();
 
     const [recipe, setRecipe] = useState<RecipeData | null>(null);
     const [loading, setLoading] = useState(false);
+    const [ingredientsLoading, setIngredientsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isSaved, setIsSaved] = useState(false);
     const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -102,28 +104,34 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
             setLoading(true);
             setError(null);
             setShowVideo(isMobile);
+            setIngredientsLoading(false);
 
             try {
                 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://igcmhlfonulqtxsiiisb.supabase.co';
+
+                // 1. Initial Fetch (Video only, skip AI)
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/recipe-search`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mealName }),
+                    body: JSON.stringify({ mealName, skipAi: true }),
                 });
 
                 const data = await response.json();
 
                 if (!response.ok) {
                     setError(data.error || 'Failed to find recipe');
+                    setLoading(false);
                     return;
                 }
 
                 setRecipe(data);
                 if (isMobile) setShowVideo(true);
+                setLoading(false); // Show video immediately
 
-                // Check if recipe is saved
+                // Check if recipe is saved (Parallel to details fetch)
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user && data.youtubeVideoId) {
+                    // ... existing saved check logic ...
                     const { data: saved } = await supabase
                         .from('saved_recipes')
                         .select('id')
@@ -132,7 +140,7 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                         .single();
                     setIsSaved(!!saved);
 
-                    // Track as recently viewed (upsert to update viewed_at)
+                    // Track recently viewed
                     try {
                         await supabase.from('recently_viewed_recipes').upsert({
                             user_id: user.id,
@@ -146,10 +154,31 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                         console.error('Failed to track recently viewed:', e);
                     }
                 }
+
+                // 2. Fetch Details (Ingredients/Nutrition) if missing
+                if ((!data.ingredients || data.ingredients.length === 0)) {
+                    setIngredientsLoading(true);
+                    try {
+                        const detailsResponse = await fetch(`${SUPABASE_URL}/functions/v1/recipe-search`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ mealName, onlyAi: true }),
+                        });
+
+                        if (detailsResponse.ok) {
+                            const detailsData = await detailsResponse.json();
+                            setRecipe(prev => prev ? ({ ...prev, ...detailsData }) : detailsData);
+                        }
+                    } catch (err) {
+                        console.error('Failed to load ingredients:', err);
+                    } finally {
+                        setIngredientsLoading(false);
+                    }
+                }
+
             } catch (err) {
                 console.error('Recipe fetch error:', err);
                 setError('Failed to load recipe');
-            } finally {
                 setLoading(false);
             }
         };
@@ -185,6 +214,30 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
             fetchGroceryList();
         }
     }, [isOpen, recipe, isFamilyModeActive, familyGroup?.id]);
+
+    // Lock body scroll when panel is open prevents background scrolling
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            if (isMobile) {
+                document.body.style.position = 'fixed'; // Strong lock for iOS/Android
+                document.body.style.width = '100%';
+            }
+        } else {
+            document.body.style.overflow = '';
+            if (isMobile) {
+                document.body.style.position = '';
+                document.body.style.width = '';
+            }
+        }
+        return () => {
+            document.body.style.overflow = '';
+            if (isMobile) {
+                document.body.style.position = '';
+                document.body.style.width = '';
+            }
+        };
+    }, [isOpen, isMobile]);
 
     // Add single ingredient to grocery
     const addToGrocery = async (ingredient: StructuredIngredient | string) => {
@@ -292,6 +345,7 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                     difficulty: recipe.difficulty,
                 });
                 setIsSaved(true);
+                await onRecipeSavedPreferenceSignal?.(recipe.mainDish || recipe.mealName);
             }
             setSavingState('saved');
             setTimeout(() => setSavingState('idle'), 1500);
@@ -346,9 +400,9 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
 
             {/* Panel */}
             <div className={`
-                fixed z-50 bg-white shadow-2xl overflow-hidden transition-transform duration-300
-                inset-x-0 bottom-0 rounded-t-2xl max-h-[90vh]
-                lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[440px] lg:max-h-none lg:rounded-none lg:rounded-l-2xl
+                fixed z-50 bg-white shadow-2xl overflow-hidden transition-transform duration-300 flex flex-col
+                inset-x-0 bottom-0 rounded-t-2xl max-h-[90vh] h-[90vh]
+                lg:inset-y-0 lg:right-0 lg:left-auto lg:w-[440px] lg:max-h-none lg:h-auto lg:rounded-none lg:rounded-l-2xl
                 ${isOpen ? 'translate-y-0 lg:translate-x-0' : 'translate-y-full lg:translate-x-full'}
             `}>
                 {/* Drag handle - mobile only */}
@@ -426,7 +480,13 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                 </div>
 
                 {/* Content */}
-                <div className="overflow-y-auto p-4 space-y-4" style={{ maxHeight: 'calc(90vh - 110px)' }}>
+                <div
+                    className="flex-1 overflow-y-auto p-4 space-y-4"
+                    style={{
+                        WebkitOverflowScrolling: 'touch',
+                        overscrollBehaviorY: 'contain'
+                    }}
+                >
                     {/* Loading state */}
                     {loading && (
                         <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -490,13 +550,13 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                             </div>
 
                             {/* Ingredients section with grocery integration */}
-                            {recipe.ingredients && recipe.ingredients.length > 0 && (
+                            {(recipe.ingredients && recipe.ingredients.length > 0 || ingredientsLoading) && (
                                 <div className="bg-orange-50 rounded-xl p-4">
                                     <div className="flex items-center justify-between mb-2">
                                         <h4 className="font-semibold text-gray-900 flex items-center gap-2">
                                             <ShoppingCart className="w-4 h-4 text-orange-600" />
-                                            Ingredients ({recipe.ingredients.length})
-                                            {recipe.isAiGenerated && (
+                                            Ingredients ({recipe.ingredients?.length || '...'})
+                                            {recipe.isAiGenerated && !ingredientsLoading && (
                                                 <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
                                                     AI
                                                 </span>
@@ -509,120 +569,139 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                                         )}
                                     </div>
 
-                                    {recipe.isAiGenerated && (
-                                        <p className="text-xs text-amber-600 mb-3 bg-amber-50 rounded px-2 py-1">
-                                            ⚠️ AI-generated list. Check video for exact ingredients.
-                                        </p>
-                                    )}
+                                    {ingredientsLoading ? (
+                                        <div className="py-4 flex flex-col items-center gap-2">
+                                            <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
+                                            <span className="text-xs text-orange-600">Analyzing video for ingredients...</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {recipe.isAiGenerated && (
+                                                <p className="text-xs text-amber-600 mb-3 bg-amber-50 rounded px-2 py-1">
+                                                    ⚠️ AI-generated list. Check video for exact ingredients.
+                                                </p>
+                                            )}
 
-                                    <ul className="space-y-2">
-                                        {recipe.ingredients.map((ing, idx) => {
-                                            const { name, quantity } = getIngredientDisplay(ing);
-                                            const inPantry = isPantryItem(name);
-                                            const inGrocery = isInGrocery(name) || addedItems.has(name);
-                                            const isAdding = addingItem === name;
+                                            <ul className="space-y-2">
+                                                {recipe.ingredients?.map((ing, idx) => {
+                                                    const { name, quantity } = getIngredientDisplay(ing);
+                                                    const inPantry = isPantryItem(name);
+                                                    const inGrocery = isInGrocery(name) || addedItems.has(name);
+                                                    const isAdding = addingItem === name;
 
-                                            return (
-                                                <li key={idx} className={`flex items-center justify-between text-sm ${inPantry ? 'text-gray-400' : 'text-gray-700'}`}>
-                                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                        {inPantry ? (
-                                                            <span className="w-4 h-4 text-gray-400 flex-shrink-0">─</span>
-                                                        ) : inGrocery ? (
-                                                            <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                                        ) : (
-                                                            <span className="w-4 h-4 border border-gray-300 rounded flex-shrink-0" />
-                                                        )}
-                                                        <span className={`truncate ${inPantry ? 'line-through' : ''}`}>
-                                                            {quantity && <span className="font-medium">{quantity} </span>}
-                                                            {name}
-                                                        </span>
-                                                    </div>
+                                                    return (
+                                                        <li key={idx} className={`flex items-center justify-between text-sm ${inPantry ? 'text-gray-400' : 'text-gray-700'}`}>
+                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                {inPantry ? (
+                                                                    <span className="w-4 h-4 text-gray-400 flex-shrink-0">─</span>
+                                                                ) : inGrocery ? (
+                                                                    <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                                                ) : (
+                                                                    <span className="w-4 h-4 border border-gray-300 rounded flex-shrink-0" />
+                                                                )}
+                                                                <span className={`truncate ${inPantry ? 'line-through' : ''}`}>
+                                                                    {quantity && <span className="font-medium">{quantity} </span>}
+                                                                    {name}
+                                                                </span>
+                                                            </div>
 
-                                                    {/* Status / Action button */}
-                                                    {inPantry ? (
-                                                        <span className="text-xs text-gray-400 flex-shrink-0 ml-2">Pantry</span>
-                                                    ) : inGrocery ? (
-                                                        <span className="text-xs text-green-600 flex-shrink-0 ml-2">✓ In List</span>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => addToGrocery(ing)}
-                                                            disabled={isAdding}
-                                                            className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-100 px-2 py-1 rounded transition-colors flex-shrink-0 ml-2"
-                                                        >
-                                                            {isAdding ? (
-                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                            {/* Status / Action button */}
+                                                            {inPantry ? (
+                                                                <span className="text-xs text-gray-400 flex-shrink-0 ml-2">Pantry</span>
+                                                            ) : inGrocery ? (
+                                                                <span className="text-xs text-green-600 flex-shrink-0 ml-2">✓ In List</span>
                                                             ) : (
-                                                                <Plus className="w-3 h-3" />
+                                                                <button
+                                                                    onClick={() => addToGrocery(ing)}
+                                                                    disabled={isAdding}
+                                                                    className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-100 px-2 py-1 rounded transition-colors flex-shrink-0 ml-2"
+                                                                >
+                                                                    {isAdding ? (
+                                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                                    ) : (
+                                                                        <Plus className="w-3 h-3" />
+                                                                    )}
+                                                                    <span className="hidden sm:inline">Add</span>
+                                                                </button>
                                                             )}
-                                                            <span className="hidden sm:inline">Add</span>
-                                                        </button>
-                                                    )}
-                                                </li>
-                                            );
-                                        })}
-                                    </ul>
+                                                        </li>
+                                                    );
+                                                })}
+                                            </ul>
 
-                                    {/* Add All Missing button */}
-                                    {(() => {
-                                        const missingCount = recipe.ingredients.filter(ing => {
-                                            const { name } = getIngredientDisplay(ing);
-                                            return !isPantryItem(name) && !isInGrocery(name) && !addedItems.has(name);
-                                        }).length;
+                                            {/* Add All Missing button */}
+                                            {(() => {
+                                                const missingCount = recipe.ingredients?.filter(ing => {
+                                                    const { name } = getIngredientDisplay(ing);
+                                                    return !isPantryItem(name) && !isInGrocery(name) && !addedItems.has(name);
+                                                }).length || 0;
 
-                                        return missingCount > 0 && (
-                                            <button
-                                                onClick={addAllMissing}
-                                                disabled={addingAll}
-                                                className="w-full mt-3 flex items-center justify-center gap-2 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
-                                            >
-                                                {addingAll ? (
-                                                    <>
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                        Adding...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Plus className="w-4 h-4" />
-                                                        Add {missingCount} to Grocery
-                                                    </>
-                                                )}
-                                            </button>
-                                        );
-                                    })()}
+                                                return missingCount > 0 && (
+                                                    <button
+                                                        onClick={addAllMissing}
+                                                        disabled={addingAll}
+                                                        className="w-full mt-3 flex items-center justify-center gap-2 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                                                    >
+                                                        {addingAll ? (
+                                                            <>
+                                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                                Adding...
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Plus className="w-4 h-4" />
+                                                                Add {missingCount} to Grocery
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })()}
+                                        </>
+                                    )}
                                 </div>
                             )}
 
                             {/* Nutrition pills */}
-                            {recipe.nutrition && (
+                            {(recipe.nutrition || ingredientsLoading) && (
                                 <div className="bg-green-50 rounded-xl p-4">
                                     <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                                         <Flame className="w-4 h-4 text-green-600" />
                                         Nutrition
-                                        <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
-                                            per serving
-                                        </span>
+                                        {recipe.nutrition && (
+                                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full">
+                                                per serving
+                                            </span>
+                                        )}
                                         {recipe.isAiGenerated && (
                                             <span className="text-xs text-gray-400 ml-auto">AI estimate</span>
                                         )}
                                     </h4>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-                                            <div className="text-lg font-bold text-gray-900">{recipe.nutrition.calories}</div>
-                                            <div className="text-xs text-gray-500">kcal</div>
+                                    {ingredientsLoading ? (
+                                        <div className="grid grid-cols-4 gap-2 animate-pulse">
+                                            {[1, 2, 3, 4].map(i => (
+                                                <div key={i} className="bg-white/50 rounded-lg p-2 h-12"></div>
+                                            ))}
                                         </div>
-                                        <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-                                            <div className="text-lg font-bold text-blue-600">{recipe.nutrition.protein}g</div>
-                                            <div className="text-xs text-gray-500">protein</div>
+                                    ) : (
+                                        <div className="grid grid-cols-4 gap-2">
+                                            <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                                                <div className="text-lg font-bold text-gray-900">{recipe.nutrition?.calories}</div>
+                                                <div className="text-xs text-gray-500">kcal</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                                                <div className="text-lg font-bold text-blue-600">{recipe.nutrition?.protein}g</div>
+                                                <div className="text-xs text-gray-500">protein</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                                                <div className="text-lg font-bold text-amber-600">{recipe.nutrition?.carbs}g</div>
+                                                <div className="text-xs text-gray-500">carbs</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-2 text-center shadow-sm">
+                                                <div className="text-lg font-bold text-red-500">{recipe.nutrition?.fat}g</div>
+                                                <div className="text-xs text-gray-500">fat</div>
+                                            </div>
                                         </div>
-                                        <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-                                            <div className="text-lg font-bold text-amber-600">{recipe.nutrition.carbs}g</div>
-                                            <div className="text-xs text-gray-500">carbs</div>
-                                        </div>
-                                        <div className="bg-white rounded-lg p-2 text-center shadow-sm">
-                                            <div className="text-lg font-bold text-red-500">{recipe.nutrition.fat}g</div>
-                                            <div className="text-xs text-gray-500">fat</div>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             )}
 
@@ -662,7 +741,7 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen }) 
                         </>
                     )}
                 </div>
-            </div>
+            </div >
         </>
     );
 };

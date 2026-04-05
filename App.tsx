@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ChefHat, ShoppingCart, Settings, RefreshCw, CalendarDays, FileText, Archive, ChevronDown, Calendar as CalendarIcon, ClipboardList, LogOut, Cpu, Share2, MessageSquareHeart, Sparkles, Shuffle, CalendarPlus, Pencil, X, AlertTriangle } from 'lucide-react';
-import { WeeklyPlan, UserPreferences, GroceryItem, PreferenceProfile, MealHistoryEntry, DayPlan, Schedule, MealTransfer } from './types';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ChefHat, ShoppingCart, Settings, RefreshCw, CalendarDays, FileText, Archive, ChevronDown, Calendar as CalendarIcon, ClipboardList, LogOut, Cpu, Share2, MessageSquareHeart, Sparkles, Shuffle, CalendarPlus, Pencil, X, AlertTriangle, Brain, Refrigerator, Users, Home, Ban, PackageOpen, ChevronRight, BookHeart } from 'lucide-react';
+import { WeeklyPlan, UserPreferences, GroceryItem, PreferenceProfile, MealHistoryEntry, DayPlan, Schedule, MealTransfer, InventoryItem, PreferenceSignal } from './types';
 import { DEFAULT_PREFERENCES, DEFAULT_PROFILE_TEMPLATES } from './constants';
 import { DEMO_MEAL_PLAN, DEMO_GROCERY_LIST } from './constants/demoData';
 import { generatePlanViaProxy, generateGroceryViaProxy, regenerateMealViaProxy, smartEditViaProxy, generateAlternativesViaProxy } from './services/aiProxyService';
@@ -10,7 +10,7 @@ import { useSettings } from './contexts/SettingsContext';
 import { useSubscription } from './contexts/SubscriptionContext';
 import { useFamily } from './contexts/FamilyContext';
 import * as supabaseService from './services/supabaseService';
-import { HouseholdSettings, getHouseholdSettings } from './services/supabaseService';
+import { HouseholdSettings, getHouseholdSettings, saveHouseholdSettings } from './services/supabaseService';
 import { applyReferral, awardReferrerCredits } from './services/referralService';
 import PreferencesModal from './components/PreferencesModal';
 import GroceryList from './components/GroceryList';
@@ -42,12 +42,16 @@ import RecipePanel from './components/RecipePanel';
 import SavedRecipesPanel from './components/SavedRecipesPanel';
 import TrustProgressCard from './components/TrustProgressCard';
 import PhonePromptModal from './components/PhonePromptModal';
-import { useStreamingGeneration } from './hooks/useStreamingGeneration';
+import InventoryCaptureModal from './components/InventoryCaptureModal';
+import PreferenceLearningSheet from './components/PreferenceLearningSheet';
 import { useSignupTrustAction, useSecondMenuTrustAction, useProfileCompleteTrustAction, useShareMenuTrustAction, usePWAInstallTrustAction, usePhoneTrustSync } from './hooks/useTrustActions';
 import { OnboardingData } from './types';
 import { format, addDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { getApiBaseUrl, isNative } from './utils/platform';
-import { notificationService } from './services/notificationService';
+import { DEFAULT_NOTIFICATION_SETTINGS, notificationService, NotificationSettings } from './services/notificationService';
+import { buildInventorySummary, createMealReplacementSignal, createRegenerateSignal, createSmartEditSignal, summarizePreferenceSignals } from './services/plannerMemoryService';
+import { sanitizeDayPlan, sanitizeGroceryItems } from './lib/mealSanitizer';
+import { formatSelectedMealsLabel, getCollapsedKitchenMemoryLabel, normalizeDayForSelectedMeals, normalizeSelectedMeals, normalizeWeeklyPlanForSelectedMeals } from './lib/mealSelection';
 
 interface AppProps {
   forceOnboarding?: boolean;
@@ -98,13 +102,25 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   const [settingsManuallyClosed, setSettingsManuallyClosed] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState<boolean | null>(null); // null = loading
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false); // Manual trigger for re-running wizard
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [preferenceSignals, setPreferenceSignals] = useState<PreferenceSignal[]>([]);
+  const [isInventoryCaptureOpen, setIsInventoryCaptureOpen] = useState(false);
+  const [inventoryFlowMode, setInventoryFlowMode] = useState<'planner' | 'onboarding'>('planner');
+  const [isLearningSheetOpen, setIsLearningSheetOpen] = useState(false);
+  const [isApplyingLearning, setIsApplyingLearning] = useState(false);
+  const [regenSignalCounts, setRegenSignalCounts] = useState<Record<string, number>>({});
 
   const [loading, setLoading] = useState(false);
   const [groceryLoading, setGroceryLoading] = useState(false);
   const [regenLoading, setRegenLoading] = useState(false);
   const [alternativesLoading, setAlternativesLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'plan' | 'calendar' | 'grocery' | 'profile'>('plan');
+  const [activeTab, setActiveTab] = useState<'plan' | 'grocery' | 'preferences' | 'profile'>('plan');
+  const [grocerySubTab, setGrocerySubTab] = useState<'list' | 'calendar'>('list');
+  const [isPlannerKitchenSetupExpanded, setIsPlannerKitchenSetupExpanded] = useState(false);
+  const [isPreferencesKitchenSetupExpanded, setIsPreferencesKitchenSetupExpanded] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
+  const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
   const [planStartDate, setPlanStartDate] = useState(new Date()); // Date to start showing meals from
   const [showLanding, setShowLanding] = useState(false); // Allow logged-in users to view landing page
   const [streamingDay, setStreamingDay] = useState(0);
@@ -114,6 +130,8 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   const [isRecipePanelOpen, setIsRecipePanelOpen] = useState(false);
   const [isSavedRecipesPanelOpen, setIsSavedRecipesPanelOpen] = useState(false);
   const [isPhonePromptOpen, setIsPhonePromptOpen] = useState(false);
+  const lastSmartEditInstructionRef = useRef('');
+  const lastPromptedLearningKeyRef = useRef('');
 
   // Trust action hooks for progressive credits
   useSignupTrustAction();
@@ -224,13 +242,13 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
         // If no current plan, check if there are scheduled meals for current week
         if (loadedPlan) {
-          setWeeklyPlan(loadedPlan);
+          setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(loadedPlan, loadedPlan.days.length > 0 ? loadedProfiles[0]?.mealsToPrepare : undefined));
         } else {
           // Check schedule for current week - this ensures existing meals show on page load
           const currentWeekStart = format(new Date(), 'yyyy-MM-dd');
           const weekFromSchedule = await supabaseService.getWeekFromSchedule(userId, currentWeekStart, activeFamilyGroupId);
           if (weekFromSchedule) {
-            setWeeklyPlan(weekFromSchedule);
+            setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(weekFromSchedule, loadedProfiles[0]?.mealsToPrepare));
           } else {
             setWeeklyPlan(null);
           }
@@ -299,7 +317,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         const currentWeekStart = format(planStartDate, 'yyyy-MM-dd');
         const weekPlan = await supabaseService.getWeekFromSchedule(userId, currentWeekStart, activeFamilyGroupId);
         if (weekPlan) {
-          setWeeklyPlan(weekPlan);
+          setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(weekPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true));
         } else {
           setWeeklyPlan(null);
         }
@@ -312,7 +330,16 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     };
 
     reloadForMode();
-  }, [isFamilyModeActive, activeFamilyGroupId]);
+  }, [
+    isAuthenticated,
+    userId,
+    activeFamilyGroupId,
+    isFamilyModeActive,
+    planStartDate,
+    profiles,
+    currentProfileId,
+    householdSettings,
+  ]);
 
   // Real-time sync for Family Mode - when any family member makes changes, refresh
   useEffect(() => {
@@ -337,7 +364,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         const currentWeekStart = format(planStartDate, 'yyyy-MM-dd');
         const weekPlan = await supabaseService.getWeekFromSchedule(userId, currentWeekStart, activeFamilyGroupId);
         // Always update - null means no scheduled meals for this week, which is valid state
-        setWeeklyPlan(weekPlan);
+        setWeeklyPlan(weekPlan ? normalizeWeeklyPlanForSelectedMeals(weekPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true) : null);
       })
       .subscribe();
 
@@ -354,7 +381,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         console.log('Family plan change detected, refreshing...', payload.eventType);
         const loadedPlan = await supabaseService.getCurrentPlan(userId, activeFamilyGroupId);
         if (loadedPlan) {
-          setWeeklyPlan(loadedPlan);
+          setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(loadedPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true));
         }
       })
       .subscribe();
@@ -363,7 +390,16 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
       scheduledMealsChannel.unsubscribe();
       weeklyPlansChannel.unsubscribe();
     };
-  }, [isAuthenticated, isFamilyModeActive, activeFamilyGroupId, userId, planStartDate]);
+  }, [
+    isAuthenticated,
+    isFamilyModeActive,
+    activeFamilyGroupId,
+    userId,
+    planStartDate,
+    profiles,
+    currentProfileId,
+    householdSettings,
+  ]);
 
   // Save current profile ID to localStorage and Supabase
   useEffect(() => {
@@ -401,27 +437,327 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
   // API key popup removed - backend provides default key
 
-  const getActivePreferences = useCallback(() => {
-    const profile = profiles.find(p => p.id === currentProfileId) || profiles[0] || DEFAULT_PREFERENCES;
+  const applyHouseholdSettingsToProfile = useCallback((
+    profile: PreferenceProfile,
+    overrideSettings?: HouseholdSettings | null
+  ): PreferenceProfile => {
+    const settings = overrideSettings ?? householdSettings;
 
-    // Merge household settings into preferences for LLM context
-    if (householdSettings) {
-      return {
-        ...profile,
-        country: householdSettings.country || 'India',
-        language: householdSettings.language || 'English',
-        householdSize: householdSettings.householdSize || 4,
-        portionSize: householdSettings.portionSize || 'regular',
-        pantryStaples: householdSettings.pantryStaples || [],
-        hasTiffin: householdSettings.hasTiffin || false,
-        tiffinDays: householdSettings.tiffinDays || [],
-        tiffinFor: householdSettings.tiffinFor || [],
-        showPrepReminders: householdSettings.showPrepReminders ?? true,
-        showQuantities: householdSettings.showQuantities ?? true,
-      };
+    return {
+      ...profile,
+      country: settings?.country || profile.country || 'India',
+      language: settings?.language || profile.language || 'English',
+      householdSize: settings?.householdSize ?? profile.householdSize ?? 4,
+      portionSize: settings?.portionSize || profile.portionSize || 'regular',
+      pantryStaples: settings?.pantryStaples ?? profile.pantryStaples ?? [],
+      hasTiffin: settings?.hasTiffin ?? profile.hasTiffin ?? false,
+      tiffinDays: settings?.tiffinDays ?? profile.tiffinDays ?? [],
+      tiffinFor: settings?.tiffinFor ?? profile.tiffinFor ?? [],
+      showPrepReminders: settings?.showPrepReminders ?? profile.showPrepReminders ?? true,
+      showQuantities: settings?.showQuantities ?? profile.showQuantities ?? true,
+    };
+  }, [householdSettings]);
+
+  const getActivePreferences = useCallback(() => {
+    const profile = profiles.find((entry) => entry.id === currentProfileId) || profiles[0] || DEFAULT_PREFERENCES;
+    return applyHouseholdSettingsToProfile(profile as PreferenceProfile);
+  }, [profiles, currentProfileId, applyHouseholdSettingsToProfile]);
+
+  const activePreferences = useMemo(() => getActivePreferences(), [getActivePreferences]);
+  const inventorySummary = useMemo(() => buildInventorySummary(inventoryItems), [inventoryItems]);
+  const pendingSignals = useMemo(
+    () => preferenceSignals.filter((signal) => signal.requiresConfirmation && !signal.appliedAt),
+    [preferenceSignals]
+  );
+  const pendingSignalSummary = useMemo(
+    () => pendingSignals.length > 0 ? summarizePreferenceSignals(pendingSignals, activePreferences) : null,
+    [pendingSignals, activePreferences]
+  );
+  const canReviewLearning = Boolean(pendingSignalSummary && pendingSignalSummary.meaningfulSignalCount > 0);
+  const selectedMeals = useMemo(
+    () => normalizeSelectedMeals(activePreferences.mealsToPrepare),
+    [activePreferences.mealsToPrepare]
+  );
+  const kitchenSetupSummary = useMemo(() => {
+    const pantryStaples = activePreferences.pantryStaples || [];
+    const dislikes = activePreferences.dislikes || [];
+    const tiffinDays = activePreferences.tiffinDays || [];
+    const householdSize = activePreferences.householdSize || 4;
+    const portionSize = activePreferences.portionSize || 'regular';
+
+    return {
+      householdLabel: `${householdSize} ${householdSize === 1 ? 'person' : 'people'}`,
+      mealCoverageLabel: formatSelectedMealsLabel(activePreferences.mealsToPrepare),
+      portionLabel: portionSize.charAt(0).toUpperCase() + portionSize.slice(1),
+      pantryCount: pantryStaples.length,
+      dislikeCount: dislikes.length,
+      inventoryLabel: inventorySummary.label,
+      inventoryCount: inventorySummary.names.length,
+      compactStatusLabel: getCollapsedKitchenMemoryLabel(
+        inventorySummary.names.length,
+        pantryStaples.length,
+        Boolean(activePreferences.hasTiffin),
+        tiffinDays
+      ),
+      tiffinSummary: activePreferences.hasTiffin
+        ? `Tiffin on ${tiffinDays.length > 0 ? tiffinDays.join(', ') : 'weekdays'}`
+        : 'No tiffin rules saved',
+      showPrepReminders: activePreferences.showPrepReminders ?? true,
+      showQuantities: activePreferences.showQuantities ?? true,
+    };
+  }, [activePreferences, inventorySummary]);
+  const generationPreferences = useMemo<UserPreferences>(() => ({
+    ...activePreferences,
+    activeInventoryItems: inventorySummary.names,
+    useInventoryFirst: inventorySummary.names.length > 0,
+  }), [activePreferences, inventorySummary]);
+
+  const updateLocalScheduleDay = useCallback((dateKey: string, dayPlan: DayPlan) => {
+    setSchedule((previous) => ({
+      ...previous,
+      [dateKey]: sanitizeDayPlan({
+        ...dayPlan,
+        day: dateKey,
+      }),
+    }));
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadNotificationPreferences = async () => {
+      const savedSettings = await notificationService.loadSettings();
+      if (!isMounted) {
+        return;
+      }
+
+      setNotificationSettings(savedSettings);
+      setNotificationSettingsLoaded(true);
+    };
+
+    void loadNotificationPreferences();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!notificationSettingsLoaded || !isNative()) {
+      return;
     }
-    return { ...profile, country: 'India' }; // Default country to India
-  }, [profiles, currentProfileId, householdSettings]);
+
+    notificationService.rescheduleNotifications(schedule, generationPreferences, notificationSettings).catch((error) => {
+      console.error('Failed to reschedule notifications:', error);
+    });
+  }, [notificationSettingsLoaded, schedule, generationPreferences, notificationSettings]);
+
+  const refreshPlannerMemory = useCallback(async () => {
+    if (!isAuthenticated) {
+      setInventoryItems([]);
+      setPreferenceSignals([]);
+      return;
+    }
+
+    const [items, signals] = await Promise.all([
+      supabaseService.getInventoryItems(userId, activeFamilyGroupId),
+      supabaseService.getPreferenceSignals(userId, activeFamilyGroupId),
+    ]);
+
+    setInventoryItems(items);
+    setPreferenceSignals(signals);
+  }, [isAuthenticated, userId, activeFamilyGroupId]);
+
+  const recordPreferenceSignal = useCallback(async (
+    signal: Omit<PreferenceSignal, 'id' | 'createdAt' | 'familyGroupId'>
+  ) => {
+    const savedSignal = await supabaseService.savePreferenceSignal(signal, userId, activeFamilyGroupId);
+    setPreferenceSignals((previous) => [savedSignal, ...previous]);
+    return savedSignal;
+  }, [userId, activeFamilyGroupId]);
+
+  const openTeachQook = useCallback(() => {
+    if (canReviewLearning) {
+      setIsLearningSheetOpen(true);
+      return;
+    }
+
+    addToast('Teach Qook appears after swaps, edits, regenerations, or saved recipes give Qook something useful to learn from.', 'info');
+  }, [canReviewLearning, addToast]);
+
+  const handleSaveNotificationSettings = useCallback(async (settings: NotificationSettings) => {
+    const savedSettings = await notificationService.saveSettings(settings);
+    setNotificationSettings(savedSettings);
+    return savedSettings;
+  }, []);
+
+  const renderKitchenSetupCard = (
+    expanded: boolean,
+    onToggle?: () => void,
+    showOpenPreferences: boolean = true
+  ) => (
+    <div className="overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 via-orange-50 to-white shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left ${onToggle ? 'hover:bg-white/40 transition-colors' : 'cursor-default'}`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-900">Kitchen Setup</span>
+            <span className="text-xs text-amber-700">Using your real setup</span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+              <Users className="w-3 h-3 text-amber-600" />
+              {kitchenSetupSummary.householdLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+              <ChefHat className="w-3 h-3 text-orange-600" />
+              {kitchenSetupSummary.mealCoverageLabel}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-white/80 bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-700">
+              <PackageOpen className="w-3 h-3 text-emerald-600" />
+              {kitchenSetupSummary.compactStatusLabel}
+            </span>
+          </div>
+        </div>
+        {onToggle && (
+          <ChevronRight className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-white/70 px-4 pb-4 pt-3">
+          <p className="text-sm text-gray-600">
+            Qook uses your household size, selected meal slots, pantry staples, and current inventory so plans fit your actual kitchen.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setInventoryFlowMode('planner');
+                setIsInventoryCaptureOpen(true);
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition-colors"
+            >
+              <Refrigerator className="w-4 h-4" />
+              {kitchenSetupSummary.inventoryCount > 0 ? 'Update What I Have' : 'Add What I Have'}
+            </button>
+            {showOpenPreferences && (
+              <button
+                type="button"
+                onClick={() => setIsPreferencesOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                Open Full Preferences
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-white bg-white/90 p-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">Household</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{kitchenSetupSummary.householdLabel}</p>
+              <p className="mt-1 text-xs text-gray-600">
+                {kitchenSetupSummary.mealCoverageLabel} • Portions: {kitchenSetupSummary.portionLabel}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white bg-white/90 p-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">Kitchen Memory</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{kitchenSetupSummary.inventoryLabel}</p>
+              <p className="mt-1 text-xs text-gray-600">
+                {activePreferences.pantryStaples?.length || 0} pantry staple{(activePreferences.pantryStaples?.length || 0) === 1 ? '' : 's'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white bg-white/90 p-3 shadow-sm">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">Rules in Play</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{kitchenSetupSummary.tiffinSummary}</p>
+              <p className="mt-1 text-xs text-gray-600">
+                {activePreferences.dislikes?.length || 0} dislike{(activePreferences.dislikes?.length || 0) === 1 ? '' : 's'} • Prep reminders {kitchenSetupSummary.showPrepReminders ? 'on' : 'off'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  useEffect(() => {
+    void refreshPlannerMemory();
+  }, [refreshPlannerMemory]);
+
+  useEffect(() => {
+    if (!pendingSignalSummary || isInventoryCaptureOpen) {
+      return;
+    }
+
+    const learningKey = pendingSignalSummary.signalIds.join('|');
+    if (pendingSignalSummary.meaningfulSignalCount >= 3 && learningKey && learningKey !== lastPromptedLearningKeyRef.current) {
+      lastPromptedLearningKeyRef.current = learningKey;
+      setIsLearningSheetOpen(true);
+    }
+  }, [pendingSignalSummary, isInventoryCaptureOpen]);
+
+  const handleAddInventoryItems = useCallback(async (items: Array<{ name: string; source: any; confidence?: number }>) => {
+    const names = items.map((item) => item.name).filter(Boolean);
+    if (names.length === 0) {
+      return;
+    }
+
+    await supabaseService.addInventoryItems(names, userId, activeFamilyGroupId, items[0]?.source || 'manual', items[0]?.confidence || 0.8);
+    await refreshPlannerMemory();
+    addToast(`${names.length} item${names.length === 1 ? '' : 's'} added to What I Have.`, 'success');
+  }, [userId, activeFamilyGroupId, refreshPlannerMemory, addToast]);
+
+  const handleRemoveInventoryItem = useCallback(async (id: string) => {
+    await supabaseService.removeInventoryItem(id, userId, activeFamilyGroupId);
+    await refreshPlannerMemory();
+  }, [userId, activeFamilyGroupId, refreshPlannerMemory]);
+
+  const handleApplyLearningSummary = useCallback(async () => {
+    if (!pendingSignalSummary) {
+      return;
+    }
+
+    setIsApplyingLearning(true);
+    try {
+      const currentProfile = profiles.find((profile) => profile.id === currentProfileId);
+      if (!currentProfile) {
+        return;
+      }
+
+      const mergedProfile: PreferenceProfile = {
+        ...currentProfile,
+        breakfastPreferences: Array.from(new Set([...(currentProfile.breakfastPreferences || []), ...pendingSignalSummary.breakfastPreferences])),
+        lunchPreferences: Array.from(new Set([...(currentProfile.lunchPreferences || []), ...pendingSignalSummary.lunchPreferences])),
+        dinnerPreferences: Array.from(new Set([...(currentProfile.dinnerPreferences || []), ...pendingSignalSummary.dinnerPreferences])),
+        dislikes: Array.from(new Set([...(currentProfile.dislikes || []), ...pendingSignalSummary.dislikes])),
+      };
+
+      const syncedProfile = applyHouseholdSettingsToProfile(mergedProfile);
+      await supabaseService.savePreferenceProfile(syncedProfile, userId);
+      setProfiles((previous) => previous.map((profile) => (
+        profile.id === syncedProfile.id ? syncedProfile : profile
+      )));
+      await supabaseService.dismissPreferenceSignals(pendingSignalSummary.signalIds, userId);
+      await refreshPlannerMemory();
+      setIsLearningSheetOpen(false);
+      addToast('Qook updated your preferences from recent actions.', 'success');
+    } finally {
+      setIsApplyingLearning(false);
+    }
+  }, [pendingSignalSummary, profiles, currentProfileId, applyHouseholdSettingsToProfile, userId, refreshPlannerMemory, addToast]);
+
+  const handleDismissLearningSummary = useCallback(async () => {
+    if (pendingSignalSummary) {
+      await supabaseService.dismissPreferenceSignals(pendingSignalSummary.signalIds, userId);
+      await refreshPlannerMemory();
+    }
+    setIsLearningSheetOpen(false);
+  }, [pendingSignalSummary, userId, refreshPlannerMemory]);
 
   // Handle onboarding completion - create/update profile based on whether it's first time or re-run
   const handleOnboardingComplete = async (data: OnboardingData, isRerun: boolean = false) => {
@@ -483,7 +819,8 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
       };
 
       // Save profile to Supabase
-      await supabaseService.savePreferenceProfile(updatedProfile, userId);
+      const syncedProfile = applyHouseholdSettingsToProfile(updatedProfile);
+      await supabaseService.savePreferenceProfile(syncedProfile, userId);
 
       // CRITICAL: Also update Global Household Settings from onboarding data
       // This ensures manual generation (which uses getActivePreferences -> global settings) sees the new values
@@ -521,10 +858,10 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
       if (isRerun) {
         // Update existing profile in state (don't replace all profiles)
-        setProfiles(prev => prev.map(p => p.id === profileId ? updatedProfile : p));
+        setProfiles(prev => prev.map(p => p.id === profileId ? syncedProfile : p));
       } else {
         // First time - set this as the only profile
-        setProfiles([updatedProfile]);
+        setProfiles([syncedProfile]);
         setCurrentProfileId(profileId);
 
         // Mark onboarding as complete (only first time)
@@ -577,8 +914,17 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         // Generate first meal plan ONLY for first-time users (free)
         setLoading(true);
         try {
-          const learningSummary = await supabaseService.getMealLearningSummary(userId);
-          const generatedPlan = await generatePlanViaProxy(userId, updatedProfile, learningSummary, apiKey);
+          const learningSummary = await supabaseService.getMealLearningSummary(userId, 3, activeFamilyGroupId);
+          const initialPreferences: UserPreferences = {
+            ...syncedProfile,
+            activeInventoryItems: inventorySummary.names,
+            useInventoryFirst: inventorySummary.names.length > 0,
+          };
+          const generatedPlan = normalizeWeeklyPlanForSelectedMeals(
+            await generatePlanViaProxy(userId, initialPreferences, learningSummary, activeFamilyGroupId, apiKey),
+            initialPreferences.mealsToPrepare,
+            initialPreferences.showPrepReminders ?? true
+          );
           setWeeklyPlan(generatedPlan);
           await supabaseService.savePlan(generatedPlan, userId, profileId, activeFamilyGroupId);
           await refreshCredits();
@@ -609,25 +955,41 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
   const handleSaveProfile = async (updatedProfile: PreferenceProfile) => {
     try {
-      await supabaseService.savePreferenceProfile(updatedProfile, userId);
+      const syncedProfile = applyHouseholdSettingsToProfile(updatedProfile);
+      await supabaseService.savePreferenceProfile(syncedProfile, userId);
 
-      const existingIndex = profiles.findIndex(p => p.id === updatedProfile.id);
+      const existingIndex = profiles.findIndex(p => p.id === syncedProfile.id);
       let newProfiles = [...profiles];
       if (existingIndex >= 0) {
-        newProfiles[existingIndex] = updatedProfile;
+        newProfiles[existingIndex] = syncedProfile;
       } else {
-        newProfiles.push(updatedProfile);
+        newProfiles.push(syncedProfile);
       }
       setProfiles(newProfiles);
 
       if (weeklyPlan) {
-        handleUpdateGroceryList(weeklyPlan, updatedProfile);
+        handleUpdateGroceryList(weeklyPlan, syncedProfile);
       }
     } catch (error: any) {
       console.error('Failed to save profile:', error);
       alert(`Failed to save profile: ${error?.message || 'Unknown error'}`);
     }
   };
+
+  const handleHouseholdSettingsSaved = useCallback(async (updatedSettings: HouseholdSettings) => {
+    setHouseholdSettings(updatedSettings);
+
+    const syncedProfiles = profiles.map((profile) => applyHouseholdSettingsToProfile(profile, updatedSettings));
+    setProfiles(syncedProfiles);
+
+    if (!userId || syncedProfiles.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      syncedProfiles.map((profile) => supabaseService.savePreferenceProfile(profile, userId))
+    );
+  }, [applyHouseholdSettingsToProfile, profiles, userId]);
 
   const handleDeleteProfile = async (profileId: string) => {
     try {
@@ -674,24 +1036,18 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         }
       }
 
-      setWeeklyPlan({ days });
+      setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals({ days }, selectedMeals, activePreferences.showPrepReminders ?? true));
       setActiveTab('plan');
     } catch (error) {
       console.error('Failed to load week:', error);
       alert('Failed to load selected dates into planner');
     }
-  }, [userId]);
+  }, [userId, activeFamilyGroupId, selectedMeals, activePreferences.showPrepReminders]);
 
   const handleGeneratePlan = async (saveMode: 'overwrite' | 'fill-empty' = 'overwrite') => {
-    if (!hasApiKey) {
-      setIsSettingsOpen(true);
-      return;
-    }
-
-    // Check if user can generate (has credits or BYOK)
     const canProceed = canGenerate('meal');
     if (!canProceed) {
-      alert('❌ Insufficient meal generation credits!\n\nYou need 1 credit to generate a meal plan.\n\nOptions:\n• Wait for weekly bonus (1 free meal every Sunday)\n• Upgrade your plan\n• Buy credit packs');
+      alert('? Insufficient meal generation credits!\n\nYou need 1 credit to generate a meal plan.\n\nOptions:\n• Wait for weekly bonus (1 free meal every Sunday)\n• Upgrade your plan\n• Buy credit packs');
       setIsPricingOpen(true); // Show pricing modal
       return;
     }
@@ -699,7 +1055,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     // Check rate limit
     const rateLimitOk = await checkRate('meal_generation');
     if (!rateLimitOk) {
-      alert('⏱️ Rate limit exceeded. Please wait a moment and try again.');
+      alert('?? Rate limit exceeded. Please wait a moment and try again.');
       return;
     }
 
@@ -709,20 +1065,31 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     setPartialDays([]);
 
     try {
-      const prefs = getActivePreferences();
+      const prefs = generationPreferences;
 
       // Fetch learning summary from last 3 months of accepted meals
-      const learningSummary = await supabaseService.getMealLearningSummary(userId, 3);
+      const learningSummary = await supabaseService.getMealLearningSummary(userId, 3, activeFamilyGroupId);
 
       // Try streaming first (now with FULL prompt), fallback to regular API
       let plan: WeeklyPlan | null = null;
 
       try {
+        const { supabase } = await import('./lib/supabase');
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          throw new Error('Authentication required. Please sign in again.');
+        }
+
         const response = await fetch(`${getApiBaseUrl()}/api/ai-stream`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: JSON.stringify({
             userId,
+            familyGroupId: activeFamilyGroupId ?? null,
             preferences: prefs,
             learningSummary,
             userApiKey: apiKey
@@ -773,7 +1140,9 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                           }).filter(Boolean) as DayPlan[];
 
                           if (parsedDays.length > 0) {
-                            setPartialDays(parsedDays);
+                            setPartialDays(
+                              parsedDays.map((day) => normalizeDayForSelectedMeals(day, prefs.mealsToPrepare, prefs.showPrepReminders ?? true))
+                            );
                           }
                         }
                       } catch {
@@ -781,7 +1150,11 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                       }
                     }
                   } else if (data.type === 'complete' && data.data) {
-                    plan = data.data as WeeklyPlan;
+                    plan = normalizeWeeklyPlanForSelectedMeals(
+                      data.data as WeeklyPlan,
+                      prefs.mealsToPrepare,
+                      prefs.showPrepReminders ?? true
+                    );
                     setStreamingDay(7);
                     setThinkingMessage('');
                     setPartialDays([]);
@@ -801,7 +1174,11 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
       // Fallback to high-quality API if streaming didn't work
       if (!plan) {
-        plan = await generatePlanViaProxy(userId, prefs, learningSummary, apiKey);
+        plan = normalizeWeeklyPlanForSelectedMeals(
+          await generatePlanViaProxy(userId, prefs, learningSummary, activeFamilyGroupId, apiKey),
+          prefs.mealsToPrepare,
+          prefs.showPrepReminders ?? true
+        );
         setStreamingDay(7);
       }
 
@@ -823,7 +1200,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
       // Reload the week to get merged result (important for fill-empty)
       const mergedPlan = await supabaseService.getWeekFromSchedule(userId, startDateStr, activeFamilyGroupId);
       if (mergedPlan) {
-        setWeeklyPlan(mergedPlan);
+        setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(mergedPlan, prefs.mealsToPrepare, prefs.showPrepReminders ?? true));
       } else {
         setWeeklyPlan(plan); // Fallback
       }
@@ -869,7 +1246,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     // Check credits
     const canProceed = canGenerate('regen');
     if (!canProceed) {
-      alert('❌ Insufficient credits!\n\nYou need credits to regenerate a meal.\n\nOptions:\n• Wait for weekly bonus\n• Upgrade your plan\n• Buy credit packs');
+      alert('? Insufficient credits!\n\nYou need credits to regenerate a meal.\n\nOptions:\n• Wait for weekly bonus\n• Upgrade your plan\n• Buy credit packs');
       setIsPricingOpen(true);
       return;
     }
@@ -888,20 +1265,34 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         userId,
         currentMeal,
         mealType,
-        getActivePreferences(),
+        generationPreferences,
         dayName,
         existingMeals,
+        activeFamilyGroupId,
         apiKey
       );
       const updatedPlan = { ...weeklyPlan };
       updatedPlan.days[dayIndex][mealType] = newMeal;
-      setWeeklyPlan(updatedPlan);
+      setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(updatedPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true));
 
       // Refresh credits after consumption
       await refreshCredits();
 
       // Save updated plan
       await supabaseService.savePlan(updatedPlan, userId, currentProfileId, activeFamilyGroupId);
+      const mealDate = format(addDays(planStartDate, dayIndex), 'yyyy-MM-dd');
+      updateLocalScheduleDay(mealDate, updatedPlan.days[dayIndex]);
+      await supabaseService.saveScheduledMeal(mealDate, updatedPlan.days[dayIndex], userId, activeFamilyGroupId);
+
+      const signalKey = `${dayIndex}-${mealType}`;
+      const nextCount = (regenSignalCounts[signalKey] || 0) + 1;
+      setRegenSignalCounts((previous) => ({ ...previous, [signalKey]: nextCount }));
+
+      if (nextCount >= 2 && currentMeal) {
+        await recordPreferenceSignal(createRegenerateSignal(mealType, currentMeal));
+        setIsLearningSheetOpen(true);
+        addToast(`Qook noted that you keep changing ${mealType}. You can review that in Teach Qook.`, 'info');
+      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -919,8 +1310,19 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
     try {
       // Generate grocery via secure proxy (credits handled server-side)
-      const groceries = await generateGroceryViaProxy(userId, plan.days, prefs, apiKey);
-      setGroceryList(groceries);
+      const groceryPreferences: UserPreferences = {
+        ...prefs,
+        activeInventoryItems: inventorySummary.names,
+        useInventoryFirst: inventorySummary.names.length > 0,
+      };
+      const groceries = await generateGroceryViaProxy(
+        userId,
+        normalizeWeeklyPlanForSelectedMeals(plan, groceryPreferences.mealsToPrepare, groceryPreferences.showPrepReminders ?? true).days,
+        groceryPreferences,
+        activeFamilyGroupId,
+        apiKey
+      );
+      setGroceryList(sanitizeGroceryItems(groceries));
       // Refresh credits after consumption
       await refreshCredits();
     } catch (e) {
@@ -1036,10 +1438,89 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   };
 
   const toggleGroceryItem = (index: number) => {
-    const newList = [...groceryList];
-    newList[index].checked = !newList[index].checked;
-    setGroceryList(newList);
+    setGroceryList((previous) => sanitizeGroceryItems(previous.map((item, itemIndex) => (
+      itemIndex === index ? { ...item, checked: !item.checked } : item
+    ))));
   };
+
+  const handleDeleteGroceryItem = (index: number) => {
+    setGroceryList((previous) => previous.filter((_, itemIndex) => itemIndex !== index));
+  };
+
+  const handleAddManualGroceryItem = (item: { item: string; quantity: string; category: string }) => {
+    setGroceryList((previous) => sanitizeGroceryItems([
+      ...previous,
+      {
+        item: item.item,
+        quantity: item.quantity,
+        category: item.category,
+        checked: false,
+        homeStatus: 'none',
+      },
+    ]));
+    addToast(`${item.item} added to your grocery list.`, 'success');
+  };
+
+  const handleRememberGroceryItem = useCallback(async (
+    index: number,
+    target: 'inventory' | 'staple'
+  ) => {
+    const selectedItem = groceryList[index];
+    if (!selectedItem) {
+      return;
+    }
+
+    const updateHomeStatus = (homeStatus: 'inventory' | 'staple') => {
+      setGroceryList((previous) => sanitizeGroceryItems(previous.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, homeStatus } : item
+      ))));
+    };
+
+    if (target === 'inventory') {
+      await supabaseService.addInventoryItems([selectedItem.item], userId, activeFamilyGroupId, 'manual', 0.95);
+      await refreshPlannerMemory();
+      updateHomeStatus('inventory');
+      addToast(`${selectedItem.item} will now be treated as available at home.`, 'success');
+      return;
+    }
+
+    const updatedStaples = Array.from(new Set([
+      ...(householdSettings?.pantryStaples || activePreferences.pantryStaples || []),
+      selectedItem.item,
+    ].map((value) => value.trim()).filter(Boolean)));
+
+    await saveHouseholdSettings(userId, {
+      ...(householdSettings || {}),
+      pantryStaples: updatedStaples,
+    });
+    setHouseholdSettings((previous) => previous ? {
+      ...previous,
+      pantryStaples: updatedStaples,
+    } : {
+      city: '',
+      country: activePreferences.country || 'India',
+      language: activePreferences.language || 'English',
+      householdSize: activePreferences.householdSize || 4,
+      portionSize: activePreferences.portionSize || 'regular',
+      pantryStaples: updatedStaples,
+      hasTiffin: activePreferences.hasTiffin || false,
+      tiffinDays: activePreferences.tiffinDays || [],
+      tiffinFor: activePreferences.tiffinFor || [],
+      showPrepReminders: activePreferences.showPrepReminders ?? true,
+      showQuantities: activePreferences.showQuantities ?? true,
+    });
+
+    updateHomeStatus('staple');
+    addToast(`${selectedItem.item} was saved as a pantry staple for future plans.`, 'success');
+  }, [
+    groceryList,
+    userId,
+    activeFamilyGroupId,
+    refreshPlannerMemory,
+    householdSettings,
+    activePreferences,
+    addToast,
+  ]);
 
   const handleGenerateGroceryFromWeek = async (meals: { date: string; breakfast: string; lunch: string; dinner: string }[]) => {
     // No API key check - proxy handles it with platform key
@@ -1047,18 +1528,25 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     // Check credits
     const canProceed = canGenerate('grocery');
     if (!canProceed) {
-      alert('❌ Insufficient credits!\n\nYou need credits to generate a grocery list.');
+      alert('? Insufficient credits!\n\nYou need credits to generate a grocery list.');
       setIsPricingOpen(true);
       return;
     }
 
     setGroceryLoading(true);
     try {
-      const prefs = getActivePreferences();
+      const prefs = generationPreferences;
       // Use secure AI proxy (credits handled server-side)
-      const list = await generateGroceryViaProxy(userId, meals, prefs, apiKey);
-      setGroceryList(list);
+      const normalizedMeals = meals.map((day) => normalizeDayForSelectedMeals({
+        day: day.date,
+        breakfast: day.breakfast || '',
+        lunch: day.lunch || '',
+        dinner: day.dinner || '',
+      }, prefs.mealsToPrepare, prefs.showPrepReminders ?? true));
+      const list = await generateGroceryViaProxy(userId, normalizedMeals, prefs, activeFamilyGroupId, apiKey);
+      setGroceryList(sanitizeGroceryItems(list));
       setActiveTab('grocery');
+      setGrocerySubTab('list');
 
       // Refresh credits after server-side consumption
       await refreshCredits();
@@ -1079,7 +1567,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     // Check credits
     const canProceed = canGenerate('edit');
     if (!canProceed) {
-      alert('❌ Insufficient credits!\n\nYou need credits to edit meals.');
+      alert('? Insufficient credits!\n\nYou need credits to edit meals.');
       setIsPricingOpen(true);
       return { options: {} };
     }
@@ -1095,7 +1583,16 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         }
       });
 
-      const result = await smartEditViaProxy(userId, currentMeals, instruction, mealTypes, getActivePreferences(), apiKey);
+      lastSmartEditInstructionRef.current = instruction;
+      const result = await smartEditViaProxy(
+        userId,
+        currentMeals,
+        instruction,
+        mealTypes,
+        generationPreferences,
+        activeFamilyGroupId,
+        apiKey
+      );
       // Refresh credits after consumption
       await refreshCredits();
       return result;
@@ -1115,7 +1612,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     Object.entries(updates).forEach(([type, meal]) => {
       updatedPlan.days[smartEditData.index][type] = meal;
     });
-    setWeeklyPlan(updatedPlan);
+    setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(updatedPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true));
 
     // Calculate the date for this day
     const mealDate = format(addDays(planStartDate, smartEditData.index), 'yyyy-MM-dd');
@@ -1131,7 +1628,19 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     };
 
     // FIXED: Save to scheduled_meals for persistence (not weekly_plans)
+    updateLocalScheduleDay(mealDate, dayData);
     await supabaseService.saveScheduledMeal(mealDate, dayData, userId, activeFamilyGroupId);
+
+    for (const [type, meal] of Object.entries(updates)) {
+      const mealType = type as 'breakfast' | 'lunch' | 'dinner';
+      const originalMeal = smartEditData.dayPlan[mealType] || '';
+      if (meal && meal !== originalMeal) {
+        await recordPreferenceSignal(
+          createSmartEditSignal(mealType, originalMeal, meal, lastSmartEditInstructionRef.current || 'Smart edit')
+        );
+      }
+    }
+    setIsLearningSheetOpen(true);
   };
 
 
@@ -1139,11 +1648,15 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   // FIXED: Save to scheduled_meals for persistence (not weekly_plans which is lost on refresh)
   const handleMealUpdate = async (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner', newValue: string) => {
     if (!weeklyPlan) return;
+    const originalMeal = weeklyPlan.days[dayIndex][mealType] || '';
+    if (originalMeal === newValue) {
+      return;
+    }
 
     // 1. Optimistic update - update UI immediately
     const updatedPlan = JSON.parse(JSON.stringify(weeklyPlan));
     updatedPlan.days[dayIndex][mealType] = newValue;
-    setWeeklyPlan(updatedPlan);
+    setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(updatedPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true));
 
     // 2. Calculate the date for this day index
     const mealDate = format(addDays(planStartDate, dayIndex), 'yyyy-MM-dd');
@@ -1159,12 +1672,40 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     };
 
     // 4. Save to scheduled_meals (PERMANENT) - respects personal vs family mode
+    updateLocalScheduleDay(mealDate, dayData);
     await supabaseService.saveScheduledMeal(mealDate, dayData, userId, activeFamilyGroupId);
+
+    if (newValue.trim()) {
+      await recordPreferenceSignal(
+        createMealReplacementSignal('manual_edit', mealType, originalMeal, newValue)
+      );
+      setIsLearningSheetOpen(true);
+    }
   };
 
 
   const handleSelectAlternative = async (meal: string, dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner') => {
-    await handleMealUpdate(dayIndex, mealType, meal);
+    if (!weeklyPlan) {
+      return;
+    }
+
+    const originalMeal = weeklyPlan.days[dayIndex][mealType] || '';
+    if (originalMeal === meal) {
+      setIsAlternativesSidebarOpen(false);
+      return;
+    }
+
+    const updatedPlan = JSON.parse(JSON.stringify(weeklyPlan));
+    updatedPlan.days[dayIndex][mealType] = meal;
+    setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals(updatedPlan, generationPreferences.mealsToPrepare, generationPreferences.showPrepReminders ?? true));
+
+    const mealDate = format(addDays(planStartDate, dayIndex), 'yyyy-MM-dd');
+    updateLocalScheduleDay(mealDate, updatedPlan.days[dayIndex]);
+    await supabaseService.saveScheduledMeal(mealDate, updatedPlan.days[dayIndex], userId, activeFamilyGroupId);
+    if (meal.trim()) {
+      await recordPreferenceSignal(createMealReplacementSignal('swap', mealType, originalMeal, meal));
+    }
+    setIsLearningSheetOpen(true);
     setIsAlternativesSidebarOpen(false);
   };
 
@@ -1175,8 +1716,9 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     try {
       const newAlternatives = await generateAlternativesViaProxy(
         userId,
-        getActivePreferences(),
+        generationPreferences,
         weeklyPlan,
+        activeFamilyGroupId,
         apiKey
       );
 
@@ -1364,13 +1906,13 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
               <div className="flex">
                 {[
                   { id: 'plan', label: 'Weekly Planner', icon: ClipboardList },
-                  { id: 'calendar', label: 'Schedule & History', icon: CalendarIcon },
-                  { id: 'grocery', label: 'Grocery List', icon: ShoppingCart }
+                  { id: 'grocery', label: 'Groceries', icon: ShoppingCart },
+                  { id: 'preferences', label: 'Setup', icon: Settings }
                 ].map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as any)}
-                    data-tour={tab.id === 'grocery' ? 'grocery-tab-desktop' : tab.id === 'calendar' ? 'calendar-tab-desktop' : undefined}
+                    data-tour={tab.id === 'grocery' ? 'grocery-tab-desktop' : undefined}
                     className={`flex items-center gap-2 py-3 px-6 border-b-2 text-sm font-medium transition-colors ${activeTab === tab.id ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'
                       }`}
                   >
@@ -1428,21 +1970,39 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                   onInstallPWA={canInstallPWA ? installPWA : undefined}
                 />
               )}
+
+              <div className="mb-4">
+                {renderKitchenSetupCard(
+                  isPlannerKitchenSetupExpanded,
+                  () => setIsPlannerKitchenSetupExpanded((previous) => !previous)
+                )}
+              </div>
+
+              {canReviewLearning && (
+                <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-indigo-900">Teach Qook is ready</p>
+                      <p className="text-sm text-indigo-700">
+                        Recent swaps, edits, or regenerations created {pendingSignalSummary?.meaningfulSignalCount || 0} learning signal{(pendingSignalSummary?.meaningfulSignalCount || 0) === 1 ? '' : 's'}.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={openTeachQook}
+                      className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+                    >
+                      <Brain className="w-4 h-4" />
+                      Review Teach Qook
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Calendar Strip */}
               <PlannerDateStrip
                 selectedDate={planStartDate}
-                onDateSelect={async (date) => {
-                  setPlanStartDate(date);
-                  // Load saved meals for this week from schedule
-                  const weekStart = format(date, 'yyyy-MM-dd');
-                  const weekPlan = await supabaseService.getWeekFromSchedule(userId, weekStart, activeFamilyGroupId);
-                  if (weekPlan) {
-                    setWeeklyPlan(weekPlan);
-                  } else {
-                    // No saved meals for this week - show empty state
-                    setWeeklyPlan(null);
-                  }
-                }}
+                onDateSelect={handleLoadWeek}
                 schedule={schedule}
               />
 
@@ -1538,7 +2098,9 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                 };
 
                 // Create weeklyPlan from manual meals if any exist
-                const hasManualMeals = Object.values(manualMeals).some(m => m.breakfast || m.lunch || m.dinner);
+                const hasManualMeals = Object.values(manualMeals).some((meals) => (
+                  selectedMeals.some((mealType) => Boolean(meals[mealType as keyof typeof meals]))
+                ));
 
                 const handleSaveManualPlan = async () => {
                   if (!hasManualMeals) {
@@ -1559,7 +2121,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                   });
 
                   // Set as weeklyPlan
-                  setWeeklyPlan({ days });
+                  setWeeklyPlan(normalizeWeeklyPlanForSelectedMeals({ days }, selectedMeals, activePreferences.showPrepReminders ?? true));
                   addToast('Manual plan created! You can now save it to calendar.', 'success');
                 };
 
@@ -1592,7 +2154,9 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                             <div className="space-y-3">
                               {[{ type: 'breakfast' as const, placeholders: breakfastPlaceholders },
                               { type: 'lunch' as const, placeholders: lunchPlaceholders },
-                              { type: 'dinner' as const, placeholders: dinnerPlaceholders }].map(({ type, placeholders }) => (
+                              { type: 'dinner' as const, placeholders: dinnerPlaceholders }]
+                                .filter(({ type }) => selectedMeals.includes(type))
+                                .map(({ type, placeholders }) => (
                                 <div key={type} className="p-3 bg-gray-50 rounded-lg focus-within:bg-orange-50 transition-colors">
                                   <label className="text-xs font-medium text-gray-400 uppercase block mb-1">{type}</label>
                                   <input
@@ -1627,6 +2191,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                           dayPlan={day}
                           dayIndex={index}
                           dateLabel={format(planDates[index], 'EEE, MMM d')}
+                          enabledMeals={selectedMeals}
                           onRegenerate={handleRegenerateMeal}
                           onSmartEdit={(plan, idx) => setSmartEditData({ dayPlan: plan, index: idx })}
                           onMealUpdate={handleMealUpdate}
@@ -1657,57 +2222,153 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
               })()}
             </div>
 
-            {/* CALENDAR TAB */}
-            <div className={`${activeTab === 'calendar' ? 'block' : 'hidden'} h-[800px]`}>
-              <CalendarView
-                schedule={schedule}
-                onInitiateTransfer={setTransferData}
-                onGenerateGroceryFromWeek={handleGenerateGroceryFromWeek}
-                groceryLoading={groceryLoading}
-                onMealUpdate={handleScheduleMealUpdate}
-                onRevert={handleRevertSchedule}
-                canRevert={scheduleHistory.length > 0}
-                onLoadWeek={handleLoadWeek}
-                onShareMeals={(scheduleData, range) => {
-                  // Convert schedule object to days array for sharing
-                  const daysArray = Object.entries(scheduleData)
-                    .filter(([, day]) => day.breakfast || day.lunch || day.dinner)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([dateKey, day]) => ({
-                      day: dateKey,
-                      breakfast: day.breakfast || '',
-                      lunch: day.lunch || '',
-                      dinner: day.dinner || ''
-                    }));
-                  setShareModalData({
-                    isOpen: true,
-                    type: 'plan',
-                    data: { days: daysArray },
-                    dateRange: range || 'Calendar Schedule',
-                    sourceLanguage: getActivePreferences().language
-                  });
-                }}
-              />
-            </div>
-
             {/* GROCERY TAB */}
             <div className={`${activeTab === 'grocery' ? 'block' : 'hidden'}`}>
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  Shopping List
-                  {groceryLoading && <RefreshCw className="w-4 h-4 animate-spin text-orange-500" />}
-                </h2>
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                      Groceries
+                      {groceryLoading && <RefreshCw className="w-4 h-4 animate-spin text-orange-500" />}
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Check items as bought, or remember them as inventory and pantry staples for future meal plans.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="inline-flex w-full sm:w-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+                  {[
+                    { id: 'list', label: 'List', icon: ShoppingCart },
+                    { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setGrocerySubTab(tab.id as 'list' | 'calendar')}
+                      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${grocerySubTab === tab.id
+                        ? 'bg-orange-600 text-white shadow-sm'
+                        : 'text-gray-600 hover:bg-gray-50'
+                        }`}
+                    >
+                      <tab.icon className="w-4 h-4" />
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <GroceryList
-                items={groceryList}
-                onToggle={toggleGroceryItem}
-                schedule={schedule}
-                onGenerateFromDates={handleGenerateGroceryFromWeek}
-                loading={groceryLoading}
-                onLoadSavedList={(items) => setGroceryList(items)}
-                userId={userId}
-                onShare={(items, range) => setShareModalData({ isOpen: true, type: 'grocery', data: items, dateRange: range, sourceLanguage: getActivePreferences().language })}
-              />
+
+              {grocerySubTab === 'list' ? (
+                <GroceryList
+                  items={groceryList}
+                  onToggle={toggleGroceryItem}
+                  onDeleteItem={handleDeleteGroceryItem}
+                  onAddItem={handleAddManualGroceryItem}
+                  onRememberItem={handleRememberGroceryItem}
+                  schedule={schedule}
+                  onGenerateFromDates={handleGenerateGroceryFromWeek}
+                  loading={groceryLoading}
+                  onLoadSavedList={(items) => setGroceryList(items)}
+                  userId={userId}
+                  onShare={(items, range) => setShareModalData({ isOpen: true, type: 'grocery', data: items, dateRange: range, sourceLanguage: activePreferences.language })}
+                />
+              ) : (
+                <div className="h-[800px]">
+                  <CalendarView
+                    schedule={schedule}
+                    onInitiateTransfer={setTransferData}
+                    onGenerateGroceryFromWeek={handleGenerateGroceryFromWeek}
+                    groceryLoading={groceryLoading}
+                    onMealUpdate={handleScheduleMealUpdate}
+                    onRevert={handleRevertSchedule}
+                    canRevert={scheduleHistory.length > 0}
+                    onLoadWeek={handleLoadWeek}
+                    onShareMeals={(scheduleData, range) => {
+                      const daysArray = Object.entries(scheduleData)
+                        .filter(([, day]) => day.breakfast || day.lunch || day.dinner)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([dateKey, day]) => ({
+                          day: dateKey,
+                          breakfast: day.breakfast || '',
+                          lunch: day.lunch || '',
+                          dinner: day.dinner || ''
+                        }));
+                      setShareModalData({
+                        isOpen: true,
+                        type: 'plan',
+                        data: { days: daysArray },
+                        dateRange: range || 'Calendar Schedule',
+                        sourceLanguage: activePreferences.language
+                      });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* PREFERENCES TAB */}
+            <div className={`${activeTab === 'preferences' ? 'block' : 'hidden'}`}>
+              <div className="max-w-4xl space-y-4">
+                <div className="rounded-3xl border border-white/70 bg-white p-5 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">Preferences & Kitchen Setup</h2>
+                      <p className="text-sm text-gray-600 mt-1">
+                        This is the setup Qook is using right now for meal coverage, tiffin, pantry, dislikes, and reminders.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsPreferencesOpen(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Open Full Preferences
+                    </button>
+                  </div>
+                </div>
+
+                {renderKitchenSetupCard(
+                  isPreferencesKitchenSetupExpanded,
+                  () => setIsPreferencesKitchenSetupExpanded((previous) => !previous),
+                  false
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setInventoryFlowMode('planner');
+                      setIsInventoryCaptureOpen(true);
+                    }}
+                    className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 text-left shadow-sm hover:bg-emerald-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <Refrigerator className="w-5 h-5 text-emerald-700" />
+                      <p className="font-semibold text-emerald-900">What I Have</p>
+                    </div>
+                    <p className="text-sm text-emerald-800">
+                      {inventorySummary.names.length > 0
+                        ? `${inventorySummary.names.length} ingredient${inventorySummary.names.length === 1 ? '' : 's'} ready to use in future plans.`
+                        : 'Add fridge, pantry, receipt, or typed items so Qook uses what is already at home.'}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="rounded-3xl border border-indigo-200 bg-indigo-50 p-5 text-left shadow-sm hover:bg-indigo-100 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 mb-2">
+                      <CalendarDays className="w-5 h-5 text-indigo-700" />
+                      <p className="font-semibold text-indigo-900">Reminders & Planning</p>
+                    </div>
+                    <p className="text-sm text-indigo-800">
+                      Morning, dinner, prep-tonight, and Sunday planning reminders are managed locally on this device.
+                    </p>
+                  </button>
+                </div>
+              </div>
             </div>
 
           </div>
@@ -1752,6 +2413,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
           currentProfileId={currentProfileId}
           history={mealHistory}
           onSaveProfile={handleSaveProfile}
+          onSaveHouseholdSettings={handleHouseholdSettingsSaved}
           onSwitchProfile={setCurrentProfileId}
           onDeleteProfile={handleDeleteProfile}
           onClose={() => setIsPreferencesOpen(false)}
@@ -1765,6 +2427,8 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
           canClose={true}
           onDeleteAccount={() => setIsDeleteAccountOpen(true)}
           onInstallPWA={canInstallPWA ? installPWA : undefined}
+          notificationSettings={notificationSettings}
+          onSaveNotificationSettings={handleSaveNotificationSettings}
         />
       )}
 
@@ -1772,11 +2436,37 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         <SmartEditModal
           dayPlan={smartEditData.dayPlan}
           preferences={getActivePreferences()}
+          enabledMealTypes={selectedMeals}
           onAnalyze={handleSmartEditAnalyze}
           onConfirm={handleSmartEditConfirm}
           onClose={() => setSmartEditData(null)}
         />
       )}
+
+      <InventoryCaptureModal
+        isOpen={isInventoryCaptureOpen}
+        existingItems={inventoryItems}
+        title={inventoryFlowMode === 'onboarding' ? 'Add What You Already Have' : 'Update What You Already Have'}
+        description={inventoryFlowMode === 'onboarding'
+          ? 'Capture your fridge, pantry, receipt, or typed ingredients before Qook generates your next meal plan.'
+          : 'Keep your kitchen memory fresh so future plans and grocery lists reflect what is already at home.'}
+        ctaLabel={inventoryFlowMode === 'onboarding' ? 'Use These in My Next Plan' : 'Save to What I Have'}
+        onClose={() => setIsInventoryCaptureOpen(false)}
+        onSkip={inventoryFlowMode === 'onboarding' ? () => setIsInventoryCaptureOpen(false) : undefined}
+        onAddItems={handleAddInventoryItems}
+        onRemoveItem={handleRemoveInventoryItem}
+      />
+
+      <PreferenceLearningSheet
+        isOpen={isLearningSheetOpen}
+        summary={pendingSignalSummary}
+        onClose={() => setIsLearningSheetOpen(false)}
+        onApply={handleApplyLearningSummary}
+        onDismiss={handleDismissLearningSummary}
+        onLater={() => setIsLearningSheetOpen(false)}
+        onOpenPreferences={() => setIsPreferencesOpen(true)}
+        isApplying={isApplyingLearning}
+      />
 
       {transferData && (
         <MoveMealModal
@@ -1924,11 +2614,30 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
               case 'close-preferences':
                 setIsPreferencesOpen(false);
                 break;
+              case 'open-inventory':
+                setActiveTab('plan');
+                setInventoryFlowMode('planner');
+                setIsInventoryCaptureOpen(true);
+                break;
+              case 'open-learning':
+                setActiveTab('plan');
+                openTeachQook();
+                break;
+              case 'open-quick-swap':
+                setActiveTab('plan');
+                if (weeklyPlan?.days?.length) {
+                  const preferredMealType = selectedMeals[0] || 'lunch';
+                  setSwapCandidate({ dayIndex: 0, mealType: preferredMealType });
+                  setIsAlternativesSidebarOpen(true);
+                }
+                break;
               case 'switch-to-calendar':
-                setActiveTab('calendar');
+                setActiveTab('grocery');
+                setGrocerySubTab('calendar');
                 break;
               case 'switch-to-grocery':
                 setActiveTab('grocery');
+                setGrocerySubTab('list');
                 break;
               case 'switch-to-plan':
                 setActiveTab('plan');
@@ -1963,7 +2672,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
       {/* Demo Mode Badge */}
       {demoMode && (
         <div className="fixed bottom-4 left-4 bg-yellow-500 text-black px-4 py-2 rounded-full text-sm font-bold z-50 shadow-lg flex items-center gap-2">
-          <span>🎓</span> DEMO MODE
+          <span>??</span> DEMO MODE
         </div>
       )}
 
@@ -2009,7 +2718,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
         isOpen={isPhonePromptOpen}
         onClose={() => setIsPhonePromptOpen(false)}
         onSuccess={(credits) => {
-          addToast(`🎉 +${credits} credits earned for adding phone!`, 'success');
+          addToast(`?? +${credits} credits earned for adding phone!`, 'success');
         }}
       />
 
@@ -2020,3 +2729,4 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 }
 
 export default App;
+

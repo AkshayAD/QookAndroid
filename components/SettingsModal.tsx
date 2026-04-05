@@ -15,11 +15,20 @@ interface SettingsModalProps {
     canClose: boolean;
     onDeleteAccount?: () => void;
     onInstallPWA?: () => void;
+    notificationSettings?: NotificationSettings;
+    onSaveNotificationSettings?: (settings: NotificationSettings) => Promise<NotificationSettings>;
 }
 
 type SettingsTab = 'profile' | 'family' | 'subscription' | 'account';
 
-export default function SettingsModal({ onClose, canClose, onDeleteAccount, onInstallPWA }: SettingsModalProps) {
+export default function SettingsModal({
+    onClose,
+    canClose,
+    onDeleteAccount,
+    onInstallPWA,
+    notificationSettings: externalNotificationSettings,
+    onSaveNotificationSettings,
+}: SettingsModalProps) {
     const { apiKey, setApiKey } = useSettings();
     const { subscription, credits } = useSubscription();
     const { user, signOut } = useAuth();
@@ -41,6 +50,7 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
     const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
     const [notificationPermission, setNotificationPermission] = useState<boolean | null>(null);
     const [testingNotification, setTestingNotification] = useState(false);
+    const [savingNotificationSettings, setSavingNotificationSettings] = useState(false);
 
     // Check if user is on a paid plan (can use BYOK)
     const isPaidUser = subscription?.plan_id && ['basic', 'pro', 'byok'].includes(subscription.plan_id);
@@ -78,6 +88,12 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
         }
     }, []);
 
+    useEffect(() => {
+        if (externalNotificationSettings) {
+            setNotificationSettings(externalNotificationSettings);
+        }
+    }, [externalNotificationSettings]);
+
     const handleSave = async () => {
         if (user?.id) {
             setSavingProfile(true);
@@ -107,6 +123,41 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
         setSavingProfile(false);
         setProfileSaved(true);
         setTimeout(() => setProfileSaved(false), 2000);
+    };
+
+    const formatTimeValue = (time: { hour: number; minute: number }) => (
+        `${String(time.hour).padStart(2, '0')}:${String(time.minute).padStart(2, '0')}`
+    );
+
+    const parseTimeValue = (value: string) => {
+        const [hour, minute] = value.split(':').map(Number);
+        return { hour, minute };
+    };
+
+    const persistNotificationSettings = async () => {
+        if (!onSaveNotificationSettings) {
+            return;
+        }
+
+        if (isNative() && notificationSettings.enabled) {
+            const granted = await notificationService.requestPermission();
+            setNotificationPermission(granted);
+            if (!granted) {
+                alert('Please enable notifications in your device settings.');
+                return;
+            }
+        }
+
+        setSavingNotificationSettings(true);
+        try {
+            const saved = await onSaveNotificationSettings(notificationSettings);
+            setNotificationSettings(saved);
+        } catch (error) {
+            console.error('Failed to save notification settings:', error);
+            alert('Unable to save reminder settings right now.');
+        } finally {
+            setSavingNotificationSettings(false);
+        }
     };
 
     // Lock body scroll when modal is open
@@ -429,18 +480,7 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                     <div className="flex items-center justify-between mb-4">
                                         <span className="text-sm text-amber-800">Enable notifications</span>
                                         <button
-                                            onClick={async () => {
-                                                if (!notificationSettings.enabled) {
-                                                    // Request permission if enabling
-                                                    const granted = await notificationService.requestPermission();
-                                                    setNotificationPermission(granted);
-                                                    if (!granted) {
-                                                        alert('Please enable notifications in your device settings');
-                                                        return;
-                                                    }
-                                                }
-                                                setNotificationSettings(prev => ({ ...prev, enabled: !prev.enabled }));
-                                            }}
+                                            onClick={() => setNotificationSettings(prev => ({ ...prev, enabled: !prev.enabled }))}
                                             className={`w-12 h-6 rounded-full transition-colors ${notificationSettings.enabled ? 'bg-amber-500' : 'bg-gray-300'
                                                 }`}
                                         >
@@ -451,24 +491,26 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
 
                                     {notificationSettings.enabled && (
                                         <>
+                                            <p className="text-xs text-amber-700 mb-3">
+                                                Morning reminders combine breakfast and lunch when both are selected and planned. Unselected or empty meal slots are skipped automatically.
+                                            </p>
                                             {/* Reminder Times */}
                                             <div className="space-y-3 mb-4">
                                                 <div className="flex items-center justify-between text-sm">
                                                     <label className="flex items-center gap-2">
                                                         <input
                                                             type="checkbox"
-                                                            checked={notificationSettings.breakfastEnabled}
-                                                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, breakfastEnabled: e.target.checked }))}
+                                                            checked={notificationSettings.morningPlanEnabled}
+                                                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, morningPlanEnabled: e.target.checked }))}
                                                             className="rounded text-amber-500"
                                                         />
-                                                        <span>🍳 Breakfast</span>
+                                                        <span>Morning plan</span>
                                                     </label>
                                                     <input
                                                         type="time"
-                                                        value={`${String(notificationSettings.breakfastTime.hour).padStart(2, '0')}:${String(notificationSettings.breakfastTime.minute).padStart(2, '0')}`}
+                                                        value={formatTimeValue(notificationSettings.morningPlanTime)}
                                                         onChange={(e) => {
-                                                            const [h, m] = e.target.value.split(':').map(Number);
-                                                            setNotificationSettings(prev => ({ ...prev, breakfastTime: { hour: h, minute: m } }));
+                                                            setNotificationSettings(prev => ({ ...prev, morningPlanTime: parseTimeValue(e.target.value) }));
                                                         }}
                                                         className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
                                                     />
@@ -477,18 +519,17 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                     <label className="flex items-center gap-2">
                                                         <input
                                                             type="checkbox"
-                                                            checked={notificationSettings.lunchEnabled}
-                                                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, lunchEnabled: e.target.checked }))}
+                                                            checked={notificationSettings.prepTonightEnabled}
+                                                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, prepTonightEnabled: e.target.checked }))}
                                                             className="rounded text-amber-500"
                                                         />
-                                                        <span>🍲 Lunch</span>
+                                                        <span>Prep tonight</span>
                                                     </label>
                                                     <input
                                                         type="time"
-                                                        value={`${String(notificationSettings.lunchTime.hour).padStart(2, '0')}:${String(notificationSettings.lunchTime.minute).padStart(2, '0')}`}
+                                                        value={formatTimeValue(notificationSettings.prepTonightTime)}
                                                         onChange={(e) => {
-                                                            const [h, m] = e.target.value.split(':').map(Number);
-                                                            setNotificationSettings(prev => ({ ...prev, lunchTime: { hour: h, minute: m } }));
+                                                            setNotificationSettings(prev => ({ ...prev, prepTonightTime: parseTimeValue(e.target.value) }));
                                                         }}
                                                         className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
                                                     />
@@ -501,14 +542,13 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                             onChange={(e) => setNotificationSettings(prev => ({ ...prev, dinnerEnabled: e.target.checked }))}
                                                             className="rounded text-amber-500"
                                                         />
-                                                        <span>🍽️ Dinner</span>
+                                                        <span>Dinner reminder</span>
                                                     </label>
                                                     <input
                                                         type="time"
-                                                        value={`${String(notificationSettings.dinnerTime.hour).padStart(2, '0')}:${String(notificationSettings.dinnerTime.minute).padStart(2, '0')}`}
+                                                        value={formatTimeValue(notificationSettings.dinnerTime)}
                                                         onChange={(e) => {
-                                                            const [h, m] = e.target.value.split(':').map(Number);
-                                                            setNotificationSettings(prev => ({ ...prev, dinnerTime: { hour: h, minute: m } }));
+                                                            setNotificationSettings(prev => ({ ...prev, dinnerTime: parseTimeValue(e.target.value) }));
                                                         }}
                                                         className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
                                                     />
@@ -517,13 +557,24 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                     <label className="flex items-center gap-2">
                                                         <input
                                                             type="checkbox"
-                                                            checked={notificationSettings.weeklyPlanEnabled}
-                                                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, weeklyPlanEnabled: e.target.checked }))}
+                                                            checked={notificationSettings.sundayPlanningEnabled}
+                                                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, sundayPlanningEnabled: e.target.checked }))}
                                                             className="rounded text-amber-500"
                                                         />
-                                                        <span>📅 Weekly Plan Reminder</span>
+                                                        <span>Sunday planning</span>
                                                     </label>
-                                                    <span className="text-amber-600 font-medium text-xs">Mon 9:00</span>
+                                                    <input
+                                                        type="time"
+                                                        value={formatTimeValue(notificationSettings.sundayPlanningTime)}
+                                                        onChange={(e) => {
+                                                            const nextTime = parseTimeValue(e.target.value);
+                                                            setNotificationSettings(prev => ({
+                                                                ...prev,
+                                                                sundayPlanningTime: { ...prev.sundayPlanningTime, ...nextTime },
+                                                            }));
+                                                        }}
+                                                        className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none text-amber-600 font-medium"
+                                                    />
                                                 </div>
                                             </div>
 
@@ -537,14 +588,21 @@ export default function SettingsModal({ onClose, canClose, onDeleteAccount, onIn
                                                 disabled={testingNotification}
                                                 className="w-full py-2 px-3 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors"
                                             >
-                                                {testingNotification ? 'Sending...' : '🔔 Send Test Notification'}
+                                                {testingNotification ? 'Sending...' : 'Send Test Notification'}
+                                            </button>
+                                            <button
+                                                onClick={persistNotificationSettings}
+                                                disabled={savingNotificationSettings}
+                                                className="w-full mt-2 py-2 px-3 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors disabled:opacity-60"
+                                            >
+                                                {savingNotificationSettings ? 'Saving...' : 'Save Reminder Settings'}
                                             </button>
                                         </>
                                     )}
 
                                     {notificationPermission === false && (
                                         <p className="text-xs text-red-600 mt-2">
-                                            ⚠️ Notifications blocked. Enable in device settings.
+                                            ⚠️ Notifications are blocked. Enable them in your device settings.
                                         </p>
                                     )}
                                 </div>

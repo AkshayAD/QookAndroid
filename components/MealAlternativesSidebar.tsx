@@ -65,6 +65,13 @@ export default function MealAlternativesSidebar({
         }
     }, [isOpen, mainTab]);
 
+    useEffect(() => {
+        if (selectedMeal) {
+            const nextTab = `${selectedMeal.mealType.charAt(0).toUpperCase()}${selectedMeal.mealType.slice(1)}` as typeof MEAL_TABS[number];
+            setMealTab(nextTab);
+        }
+    }, [selectedMeal]);
+
     const fetchSavedRecipes = async () => {
         setLoadingSaved(true);
         try {
@@ -426,4 +433,3 @@ export default function MealAlternativesSidebar({
         </>
     );
 }
-

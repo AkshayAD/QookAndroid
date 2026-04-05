@@ -32,6 +32,34 @@ const SavedRecipesPanel: React.FC<SavedRecipesPanelProps> = ({ isOpen, onClose, 
         }
     }, [isOpen]);
 
+    // Lock body scroll when panel is open
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = 'hidden';
+            // Mobile specific lock
+            const isMobile = window.innerWidth < 1024;
+            if (isMobile) {
+                document.body.style.position = 'fixed';
+                document.body.style.width = '100%';
+            }
+        } else {
+            document.body.style.overflow = '';
+            const isMobile = window.innerWidth < 1024;
+            if (isMobile) {
+                document.body.style.position = '';
+                document.body.style.width = '';
+            }
+        }
+        return () => {
+            document.body.style.overflow = '';
+            const isMobile = window.innerWidth < 1024;
+            if (isMobile) {
+                document.body.style.position = '';
+                document.body.style.width = '';
+            }
+        };
+    }, [isOpen]);
+
     const fetchSavedRecipes = async () => {
         setLoading(true);
         try {
@@ -114,7 +142,13 @@ const SavedRecipesPanel: React.FC<SavedRecipesPanelProps> = ({ isOpen, onClose, 
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto">
+                <div
+                    className="flex-1 overflow-y-auto"
+                    style={{
+                        WebkitOverflowScrolling: 'touch',
+                        overscrollBehaviorY: 'contain'
+                    }}
+                >
                     {loading ? (
                         <div className="flex items-center justify-center py-16">
                             <Loader2 className="w-8 h-8 text-orange-500 animate-spin" />

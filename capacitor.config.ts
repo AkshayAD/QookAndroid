@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
     android: {
         allowMixedContent: false,
         captureInput: true,
-        webContentsDebuggingEnabled: true // Set to false for production
+        webContentsDebuggingEnabled: false
     },
     server: {
         androidScheme: 'https',
@@ -34,11 +34,10 @@ const config: CapacitorConfig = {
             overlaysWebView: false   // Content renders BELOW status bar
         },
         Keyboard: {
-            resize: 'body' as const,
+            resize: 'body' as any,
             resizeOnFullScreen: true
         }
     }
 };
 
 export default config;
-

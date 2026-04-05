@@ -13,33 +13,24 @@ import {
     getFamilyMembers,
     getFamilyCreditPool,
     subscribeToFamilyGroup,
-    isInFamilyMode,
     isFamilyOwner
 } from '../services/familyService';
 
 interface FamilyContextType {
-    // Family status
     familyGroup: FamilyGroup | null;
     members: FamilyMember[];
     isInFamily: boolean;
     isOwner: boolean;
     loading: boolean;
-
-    // Mode toggle: Personal vs Family
-    isFamilyModeActive: boolean;  // Is the user viewing family meals?
-    toggleFamilyMode: () => void; // Switch between modes
+    isFamilyModeActive: boolean;
+    toggleFamilyMode: () => void;
     setFamilyModeActive: (active: boolean) => void;
-
-    // Credit pool (for family mode)
     familyCredits: number;
-
-    // Actions
     refreshFamily: () => Promise<void>;
 }
 
 const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
-
-const FAMILY_MODE_STORAGE_KEY = 'qook_family_mode_active';
+const FAMILY_MODE_STORAGE_KEY = 'qook_family_mode_active_v2';
 
 export function FamilyProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
@@ -49,12 +40,10 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     const [isOwner, setIsOwner] = useState(false);
     const [loading, setLoading] = useState(true);
     const [isFamilyModeActive, setIsFamilyModeActive] = useState<boolean>(() => {
-        // Initialize from localStorage
         const saved = localStorage.getItem(FAMILY_MODE_STORAGE_KEY);
-        return saved !== null ? saved === 'true' : true; // Default to family mode on
+        return saved !== null ? saved === 'true' : false;
     });
 
-    // Load family data
     const loadFamilyData = async () => {
         if (!user?.id) {
             setFamilyGroup(null);
@@ -95,7 +84,6 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
         loadFamilyData();
     }, [user?.id]);
 
-    // Real-time subscription
     useEffect(() => {
         if (!familyGroup?.id) return;
 
@@ -112,17 +100,15 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
         await loadFamilyData();
     };
 
-    // Toggle family mode
     const toggleFamilyMode = () => {
-        if (!familyGroup?.is_active) return; // Can only toggle if in a family
+        if (!familyGroup?.is_active) return;
         const newValue = !isFamilyModeActive;
         setIsFamilyModeActive(newValue);
         localStorage.setItem(FAMILY_MODE_STORAGE_KEY, String(newValue));
     };
 
-    // Set family mode explicitly
     const setFamilyModeActiveHandler = (active: boolean) => {
-        if (!familyGroup?.is_active && active) return; // Can't enable if not in family
+        if (!familyGroup?.is_active && active) return;
         setIsFamilyModeActive(active);
         localStorage.setItem(FAMILY_MODE_STORAGE_KEY, String(active));
     };
@@ -150,7 +136,6 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
 export function useFamily() {
     const context = useContext(FamilyContext);
     if (context === undefined) {
-        // Return safe defaults if used outside provider
         return {
             familyGroup: null,
             members: [],
@@ -167,10 +152,6 @@ export function useFamily() {
     return context;
 }
 
-/**
- * Hook to get the current family group ID for meal operations
- * Returns the family group ID if in family mode, null otherwise
- */
 export function useActiveFamilyGroupId(): string | null {
     const { isInFamily, isFamilyModeActive, familyGroup } = useFamily();
     if (isInFamily && isFamilyModeActive && familyGroup) {

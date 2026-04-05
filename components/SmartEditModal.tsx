@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DayPlan, UserPreferences } from '../types';
 import { X, Sparkles, Send, Check, Camera, Image, Loader2, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -10,13 +10,19 @@ import { useAuth } from '../contexts/AuthContext';
 interface Props {
   dayPlan: DayPlan;
   preferences: UserPreferences;
+  enabledMealTypes?: Array<'breakfast' | 'lunch' | 'dinner'>;
   onConfirm: (updates: Record<string, string>) => void;
   onClose: () => void;
   onAnalyze: (mealTypes: string[], instruction: string) => Promise<{ options: Record<string, string[]> }>;
 }
 
-const SmartEditModal: React.FC<Props> = ({ dayPlan, onConfirm, onClose, onAnalyze }) => {
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(['Lunch']);
+const SmartEditModal: React.FC<Props> = ({ dayPlan, onConfirm, onClose, onAnalyze, enabledMealTypes = ['breakfast', 'lunch', 'dinner'] }) => {
+  const availableMealTypes = useMemo(
+    () => (enabledMealTypes.length > 0 ? enabledMealTypes : ['breakfast', 'lunch', 'dinner'])
+      .map((type) => `${type.charAt(0).toUpperCase()}${type.slice(1)}`),
+    [enabledMealTypes]
+  );
+  const [selectedTypes, setSelectedTypes] = useState<string[]>(() => [availableMealTypes[0] || 'Lunch']);
   const [instruction, setInstruction] = useState('');
   const [generatedOptions, setGeneratedOptions] = useState<Record<string, string[]> | null>(null);
   const [selectedOptions, setSelectedOptions] = useState<Record<string, number>>({});
@@ -28,6 +34,13 @@ const SmartEditModal: React.FC<Props> = ({ dayPlan, onConfirm, onClose, onAnalyz
   const [extractingIngredients, setExtractingIngredients] = useState(false);
   
   const { user } = useAuth();
+
+  useEffect(() => {
+    setSelectedTypes((previous) => {
+      const filtered = previous.filter((type) => availableMealTypes.includes(type));
+      return filtered.length > 0 ? filtered : [availableMealTypes[0] || 'Lunch'];
+    });
+  }, [availableMealTypes]);
 
   const toggleType = (type: string) => {
     setSelectedTypes(prev =>
@@ -161,7 +174,7 @@ const SmartEditModal: React.FC<Props> = ({ dayPlan, onConfirm, onClose, onAnalyz
           <div className="mb-6">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 block">Select Meals to Edit</label>
             <div className="flex gap-2">
-              {(['Breakfast', 'Lunch', 'Dinner'] as const).map((type) => {
+              {availableMealTypes.map((type) => {
                 const isSelected = selectedTypes.includes(type);
                 return (
                   <button

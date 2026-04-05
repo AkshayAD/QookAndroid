@@ -1,152 +1,215 @@
-import { useState, useCallback } from 'react';
-import { WeeklyPlan, DayPlan } from '../types';
+import { useCallback, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { WeeklyPlan } from '../types';
 import { getApiBaseUrl } from '../utils/platform';
 
 interface StreamingState {
-    isStreaming: boolean;
-    currentDay: number;
-    partialPlan: Partial<WeeklyPlan> | null;
-    error: string | null;
-    progress: string;
+  isGenerating: boolean;
+  progress: number;
+  currentDay: string | null;
+  currentMessage: string | null;
+  partialPlan: WeeklyPlan | null;
+  error: string | null;
 }
 
-interface UseStreamingGenerationReturn extends StreamingState {
-    generateWithStreaming: (userId: string, preferences: any, learningSummary?: any, userApiKey?: string) => Promise<WeeklyPlan | null>;
-    reset: () => void;
+interface StreamProgressPayload {
+  day?: string;
+  dayName?: string;
+  message?: string;
+  progress?: number;
+  partialDay?: unknown;
+  partialDays?: unknown[];
 }
 
-// Use centralized API URL (handles native vs web)
-const getApiUrl = getApiBaseUrl;
+const initialState: StreamingState = {
+  isGenerating: false,
+  progress: 0,
+  currentDay: null,
+  currentMessage: null,
+  partialPlan: null,
+  error: null,
+};
 
-export function useStreamingGeneration(): UseStreamingGenerationReturn {
-    const [state, setState] = useState<StreamingState>({
-        isStreaming: false,
-        currentDay: 0,
+function looksLikeFamilyGroupId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    || value.startsWith('family_')
+    || value.startsWith('group_');
+}
+
+function normalizeOptionalArgs(
+  familyGroupId?: string | null,
+  userApiKey?: string
+): { familyGroupId?: string | null; userApiKey?: string } {
+  if (familyGroupId && !userApiKey && !looksLikeFamilyGroupId(familyGroupId)) {
+    return {
+      familyGroupId: null,
+      userApiKey: familyGroupId,
+    };
+  }
+
+  return { familyGroupId, userApiKey };
+}
+
+async function getStreamingHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('Authentication required. Please sign in again.');
+  }
+
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.access_token}`,
+  };
+}
+
+export function useStreamingGeneration() {
+  const [state, setState] = useState<StreamingState>(initialState);
+
+  const reset = useCallback(() => {
+    setState(initialState);
+  }, []);
+
+  const generateWithStreaming = useCallback(
+    async (
+      userId: string,
+      preferences: unknown,
+      learningSummary?: unknown,
+      familyGroupId?: string | null,
+      userApiKey?: string
+    ): Promise<WeeklyPlan> => {
+      const normalized = normalizeOptionalArgs(familyGroupId, userApiKey);
+
+      setState({
+        isGenerating: true,
+        progress: 0,
+        currentDay: null,
+        currentMessage: 'Preparing your weekly plan...',
         partialPlan: null,
         error: null,
-        progress: ''
-    });
+      });
 
-    const reset = useCallback(() => {
-        setState({
-            isStreaming: false,
-            currentDay: 0,
-            partialPlan: null,
-            error: null,
-            progress: ''
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/api/ai-stream`, {
+          method: 'POST',
+          headers: await getStreamingHeaders(),
+          body: JSON.stringify({
+            userId,
+            familyGroupId: normalized.familyGroupId ?? null,
+            preferences,
+            learningSummary,
+            userApiKey: normalized.userApiKey,
+          }),
         });
-    }, []);
 
-    const generateWithStreaming = useCallback(async (
-        userId: string,
-        preferences: any,
-        learningSummary?: any,
-        userApiKey?: string
-    ): Promise<WeeklyPlan | null> => {
-        setState(prev => ({ ...prev, isStreaming: true, error: null, progress: 'Starting...' }));
+        if (!response.ok || !response.body) {
+          let errorMessage = 'Streaming generation failed';
 
-        try {
-            const response = await fetch(`${getApiUrl()}/api/ai-stream`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    userId,
-                    preferences,
-                    learningSummary,
-                    userApiKey
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || 'Streaming failed');
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData?.error || errorMessage;
+          } catch {
+            const text = await response.text().catch(() => '');
+            if (text) {
+              errorMessage = text;
             }
+          }
 
-            const reader = response.body?.getReader();
-            if (!reader) {
-                throw new Error('No response body');
-            }
-
-            const decoder = new TextDecoder();
-            let fullText = '';
-            let finalPlan: WeeklyPlan | null = null;
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split('\n');
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const data = JSON.parse(line.slice(6));
-
-                            switch (data.type) {
-                                case 'start':
-                                    setState(prev => ({ ...prev, progress: data.message }));
-                                    break;
-
-                                case 'progress':
-                                    setState(prev => ({
-                                        ...prev,
-                                        currentDay: data.day,
-                                        progress: data.message
-                                    }));
-                                    break;
-
-                                case 'chunk':
-                                    fullText += data.text;
-                                    // Try to parse partial result
-                                    try {
-                                        // Count complete days from raw JSON
-                                        const dayMatches = fullText.match(/"day"\s*:\s*"[^"]+"/g) || [];
-                                        setState(prev => ({
-                                            ...prev,
-                                            currentDay: Math.max(prev.currentDay, dayMatches.length)
-                                        }));
-                                    } catch {
-                                        // Ignore parse errors for partial JSON
-                                    }
-                                    break;
-
-                                case 'complete':
-                                    finalPlan = data.data as WeeklyPlan;
-                                    setState(prev => ({
-                                        ...prev,
-                                        isStreaming: false,
-                                        currentDay: 7,
-                                        progress: 'Complete!'
-                                    }));
-                                    break;
-
-                                case 'error':
-                                    throw new Error(data.message);
-                            }
-                        } catch (parseError) {
-                            // Ignore individual parse errors
-                        }
-                    }
-                }
-            }
-
-            return finalPlan;
-        } catch (error: any) {
-            setState(prev => ({
-                ...prev,
-                isStreaming: false,
-                error: error.message || 'Streaming failed'
-            }));
-            return null;
+          throw new Error(errorMessage);
         }
-    }, []);
 
-    return {
-        ...state,
-        generateWithStreaming,
-        reset
-    };
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalPlan: WeeklyPlan | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
+
+          for (const chunk of chunks) {
+            const lines = chunk.split('\n');
+            let eventType = 'message';
+            let data = '';
+
+            for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith('data: ')) {
+                data += line.slice(6);
+              }
+            }
+
+            if (!data) {
+              continue;
+            }
+
+            if (eventType === 'error') {
+              const payload = JSON.parse(data);
+              throw new Error(payload.error || 'Streaming generation failed');
+            }
+
+            if (eventType === 'progress' || eventType === 'thinking') {
+              const payload = JSON.parse(data) as StreamProgressPayload;
+              const partialDays = Array.isArray(payload.partialDays)
+                ? payload.partialDays
+                : payload.partialDay
+                  ? [payload.partialDay]
+                  : [];
+
+              setState((previous) => ({
+                ...previous,
+                progress: payload.progress ?? previous.progress,
+                currentDay: payload.dayName || payload.day || previous.currentDay,
+                currentMessage: payload.message || previous.currentMessage,
+                partialPlan: partialDays.length > 0
+                  ? ({ days: partialDays } as WeeklyPlan)
+                  : previous.partialPlan,
+              }));
+              continue;
+            }
+
+            if (eventType === 'complete') {
+              finalPlan = JSON.parse(data) as WeeklyPlan;
+              setState((previous) => ({
+                ...previous,
+                isGenerating: false,
+                progress: 100,
+                currentMessage: 'Plan ready',
+                partialPlan: finalPlan,
+              }));
+            }
+          }
+        }
+
+        if (!finalPlan) {
+          throw new Error('Streaming completed without returning a meal plan.');
+        }
+
+        return finalPlan;
+      } catch (error: any) {
+        const message = error instanceof Error ? error.message : 'Streaming generation failed';
+        setState((previous) => ({
+          ...previous,
+          isGenerating: false,
+          error: message,
+        }));
+        throw error;
+      }
+    },
+    []
+  );
+
+  return {
+    ...state,
+    generateWithStreaming,
+    reset,
+  };
 }
-
-export default useStreamingGeneration;
