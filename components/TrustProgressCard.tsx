@@ -5,14 +5,13 @@
  * Shows completed actions with checkmarks and pending actions with prompts.
  */
 
-import React, { useState, useEffect } from 'react';
-import { Gift, Check, Phone, Calendar, Save, Smartphone, ChevronDown, ChevronUp, X } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Gift, Check, Phone, Calendar, Save, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { getTrustProgress, TrustProgress, TRUST_ACTION_LABELS, TRUST_ACTION_CREDITS, TrustActionType } from '../services/trustActions';
 import { useAuth } from '../contexts/AuthContext';
 
 interface TrustProgressCardProps {
     onAddPhone?: () => void;
-    onInstallPWA?: () => void;
     className?: string;
     compact?: boolean;
 }
@@ -23,12 +22,11 @@ const ACTION_ICONS: Record<TrustActionType, React.ReactNode> = {
     add_phone: <Phone className="w-4 h-4" />,
     generate_second_menu: <Calendar className="w-4 h-4" />,
     share_menu_commands: <Save className="w-4 h-4" />,
-    install_pwa: <Smartphone className="w-4 h-4" />
+    install_pwa: null,
 };
 
 export default function TrustProgressCard({
     onAddPhone,
-    onInstallPWA,
     className = '',
     compact = false
 }: TrustProgressCardProps) {
@@ -38,13 +36,7 @@ export default function TrustProgressCard({
     const [expanded, setExpanded] = useState(!compact);
     const [dismissed, setDismissed] = useState(false);
 
-    useEffect(() => {
-        if (user) {
-            loadProgress();
-        }
-    }, [user]);
-
-    async function loadProgress() {
+    const loadProgress = useCallback(async () => {
         if (!user) return;
         setLoading(true);
         try {
@@ -54,7 +46,26 @@ export default function TrustProgressCard({
             console.error('Failed to load trust progress:', error);
         }
         setLoading(false);
-    }
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) {
+            setProgress(null);
+            setLoading(false);
+            return;
+        }
+
+        loadProgress();
+    }, [user, loadProgress]);
+
+    useEffect(() => {
+        const handleTrustUpdate = () => {
+            loadProgress();
+        };
+
+        window.addEventListener('trust-actions-updated', handleTrustUpdate);
+        return () => window.removeEventListener('trust-actions-updated', handleTrustUpdate);
+    }, [loadProgress]);
 
     // Don't show if all actions completed or dismissed
     if (dismissed || loading || !progress) return null;
@@ -170,14 +181,6 @@ export default function TrustProgressCard({
                                     className="text-xs bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600"
                                 >
                                     Add
-                                </button>
-                            )}
-                            {action === 'install_pwa' && onInstallPWA && (
-                                <button
-                                    onClick={onInstallPWA}
-                                    className="text-xs bg-orange-500 text-white px-2 py-1 rounded hover:bg-orange-600"
-                                >
-                                    Install
                                 </button>
                             )}
                         </div>

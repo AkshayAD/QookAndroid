@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckSquare, Share2, Calendar, Loader2, ShoppingCart, Save, Clock, Trash2, ChevronDown, ChevronUp, Home, Plus } from 'lucide-react';
-import { format, addDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
-import { GroceryItem, Schedule, SavedGroceryList } from '../types';
+import { Calendar, Check, CheckSquare, ChevronDown, ChevronUp, Clock, Home, Loader2, Plus, Save, Share2, ShoppingCart, Trash2 } from 'lucide-react';
+import { addDays, endOfWeek, format, parseISO, startOfWeek } from 'date-fns';
+import type { GroceryItem, SavedGroceryList, Schedule } from '../types';
 import * as supabaseService from '../services/supabaseService';
+import { formatCompactDateRange, normalizeCompactDateRangeLabel } from '../lib/dateRange';
 
 interface Props {
   items: GroceryItem[];
@@ -13,7 +14,7 @@ interface Props {
   schedule?: Schedule;
   onGenerateFromDates?: (meals: { date: string; breakfast: string; lunch: string; dinner: string }[]) => Promise<void>;
   loading?: boolean;
-  onLoadSavedList?: (items: GroceryItem[]) => void;
+  onLoadSavedList?: (items: GroceryItem[], dateRange?: string) => void;
   userId?: string;
   currentDateRange?: string;
   onShare?: (items: GroceryItem[], dateRange: string) => void;
@@ -50,6 +51,9 @@ const GroceryList: React.FC<Props> = ({
   const [rememberMenuIndex, setRememberMenuIndex] = useState<number | null>(null);
   const [draftItem, setDraftItem] = useState({ item: '', quantity: '', category: 'Produce' });
 
+  const resolvedDateRange = currentDateRange || formatCompactDateRange(startDate, endDate);
+  const visibleDateRange = normalizeCompactDateRangeLabel(resolvedDateRange);
+
   useEffect(() => {
     void loadHistory();
   }, [userId]);
@@ -61,21 +65,21 @@ const GroceryList: React.FC<Props> = ({
 
   const handleShare = () => {
     if (onShare) {
-      const range = currentDateRange || `${format(parseISO(startDate), 'MMM d')} - ${format(parseISO(endDate), 'MMM d, yyyy')}`;
-      onShare(items, range);
+      onShare(items, visibleDateRange);
       return;
     }
 
     const text = items.map((item) => `${item.checked ? '[x]' : '[ ]'} ${item.item} (${item.quantity})`).join('\n');
     if (navigator.share) {
-      navigator.share({
+      void navigator.share({
         title: 'CookCommander Grocery List',
         text: `${text}\n\nPlanned via QookCommander - free AI meal planner`,
       });
-    } else {
-      navigator.clipboard.writeText(text);
-      alert('List copied to clipboard!');
+      return;
     }
+
+    void navigator.clipboard.writeText(text);
+    alert('List copied to clipboard!');
   };
 
   const handleSaveList = async () => {
@@ -86,8 +90,7 @@ const GroceryList: React.FC<Props> = ({
 
     setSaving(true);
     try {
-      const dateRange = currentDateRange || `${format(parseISO(startDate), 'MMM d')} - ${format(parseISO(endDate), 'MMM d, yyyy')}`;
-      await supabaseService.saveGroceryListToHistory(items, dateRange, userId);
+      await supabaseService.saveGroceryListToHistory(items, visibleDateRange, userId);
       await loadHistory();
       alert('Grocery list saved!');
     } catch (error) {
@@ -99,7 +102,7 @@ const GroceryList: React.FC<Props> = ({
   };
 
   const handleLoadList = (list: SavedGroceryList) => {
-    onLoadSavedList?.(list.items);
+    onLoadSavedList?.(list.items, normalizeCompactDateRangeLabel(list.dateRange));
     setShowHistory(false);
   };
 
@@ -281,16 +284,20 @@ const GroceryList: React.FC<Props> = ({
               {savedLists.map((list) => (
                 <div
                   key={list.id}
-                  onClick={() => handleLoadList(list)}
-                  className="p-3 border-b border-gray-50 hover:bg-indigo-50 cursor-pointer flex items-center justify-between group transition-colors"
+                  className="p-3 border-b border-gray-50 hover:bg-indigo-50 flex items-center justify-between gap-2 group transition-colors"
                 >
-                  <div>
-                    <p className="font-medium text-sm text-gray-800">{list.dateRange}</p>
-                    <p className="text-xs text-gray-500">{list.items.length} items • {format(new Date(list.createdAt), 'MMM d, h:mm a')}</p>
-                  </div>
                   <button
+                    type="button"
+                    onClick={() => handleLoadList(list)}
+                    className="flex-1 text-left rounded-lg px-1 py-0.5"
+                  >
+                    <p className="font-medium text-sm text-gray-800">{normalizeCompactDateRangeLabel(list.dateRange)}</p>
+                    <p className="text-xs text-gray-500">{list.items.length} items | {format(new Date(list.createdAt), 'MMM d, h:mm a')}</p>
+                  </button>
+                  <button
+                    type="button"
                     onClick={(event) => handleDeleteList(list.id, event)}
-                    className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="shrink-0 p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -373,11 +380,14 @@ const GroceryList: React.FC<Props> = ({
       ) : (
         <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
           <div className="p-4 bg-orange-50 border-b border-orange-100">
-            <div className="flex justify-between items-center mb-3 sm:mb-0">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                <CheckSquare className="w-5 h-5 text-orange-600" /> Grocery List
-                <span className="text-sm font-normal text-gray-500">({items.length} items)</span>
-              </h2>
+            <div className="flex justify-between items-start gap-3 mb-3 sm:mb-0">
+              <div>
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <CheckSquare className="w-5 h-5 text-orange-600" /> Grocery List
+                  <span className="text-sm font-normal text-gray-500">({items.length} items)</span>
+                </h2>
+                <p className="mt-1 text-sm font-semibold text-orange-700">{visibleDateRange}</p>
+              </div>
               <div className="hidden sm:flex items-center gap-2">
                 <button
                   onClick={handleSaveList}
@@ -431,7 +441,7 @@ const GroceryList: React.FC<Props> = ({
                             title={item.checked ? 'Mark as not bought' : 'Mark as bought'}
                           >
                             <div className={`w-5 h-5 rounded border flex items-center justify-center ${item.checked ? 'bg-orange-500 border-orange-500' : 'border-gray-300 bg-white'}`}>
-                              {item.checked && <span className="text-white text-xs">✓</span>}
+                              {item.checked && <Check className="w-3 h-3 text-white" />}
                             </div>
                           </button>
 

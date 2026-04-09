@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
     buildMealPlanPrompt as buildSharedMealPlanPrompt,
     normalizeGeneratedWeeklyPlan,
-} from './promptContext';
+} from './promptContext.js';
 
 /**
  * Streaming AI Proxy for QookCommander

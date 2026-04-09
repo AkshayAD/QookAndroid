@@ -32,6 +32,8 @@ interface User {
     current_tier: string;
     last_active_at: string;
     total_generations: number;
+    active_credits: number;
+    bonus_credits: number;
 }
 
 interface UserDetails {
@@ -185,7 +187,7 @@ export default function AdminDashboard() {
             return;
         }
         const filtered = allUsers.filter(u =>
-            u.email.toLowerCase().includes(searchQuery.toLowerCase())
+            (u.email || '').toLowerCase().includes(searchQuery.toLowerCase())
         );
         setUsers(filtered);
     }
@@ -395,15 +397,31 @@ export default function AdminDashboard() {
     }
 
     async function resetTestUser(email: string, tier: string) {
-        if (!confirm(`Reset test user ${email} to fresh ${tier} state?`)) return;
+        if (!confirm(`Reset QA account ${email} to a fresh onboarding state?`)) return;
         setActionLoading(true);
         try {
             const result = await adminAPI('reset_test_user', { email, tier });
             if (result.success) {
-                setMessage({ type: 'success', text: result.data.message || 'Test user reset' });
+                const counts = result.data?.counts || {};
+                const clearedTables = Object.entries(counts)
+                    .filter(([, value]) => Number(value) > 0)
+                    .map(([key, value]) => `${key}: ${value}`)
+                    .slice(0, 6)
+                    .join(', ');
+
+                setMessage({
+                    type: 'success',
+                    text: clearedTables
+                        ? `${result.data.message || 'QA account reset'} (${clearedTables})`
+                        : (result.data.message || 'QA account reset')
+                });
+                loadTestAccounts();
+            }
+            else {
+                setMessage({ type: 'error', text: result.error || 'Failed to reset QA account' });
             }
         } catch (e) {
-            setMessage({ type: 'error', text: 'Failed to reset test user' });
+            setMessage({ type: 'error', text: 'Failed to reset QA account' });
         } finally {
             setActionLoading(false);
         }
@@ -492,7 +510,7 @@ export default function AdminDashboard() {
         return (
             <div className="space-y-6">
                 <h2 className="text-xl font-semibold">Test Accounts</h2>
-                <p className="text-gray-500">Pre-configured test accounts for QA testing. Use Google OAuth with these emails.</p>
+                <p className="text-gray-500">Reusable QA accounts for onboarding and billing checks. Manual-reset accounts should be created by signing in with Google once, then reset from here before the next test run.</p>
 
                 {/* Test Account Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -518,8 +536,13 @@ export default function AdminDashboard() {
                             </div>
                             <p className="text-sm font-medium mb-1">{acc.email}</p>
                             <p className="text-xs text-gray-500 mb-4">{acc.description}</p>
+                            {acc.reset_mode === 'manual' && (
+                                <p className="text-[11px] text-amber-700 mb-3">
+                                    Google OAuth QA account. Login once with Google to create the auth user, then use reset before each onboarding test.
+                                </p>
+                            )}
                             <div className="flex gap-2">
-                                {!acc.exists ? (
+                                {!acc.exists && acc.canCreate ? (
                                     <button
                                         onClick={() => createTestUser(acc.email, acc.tier)}
                                         disabled={actionLoading}
@@ -527,13 +550,17 @@ export default function AdminDashboard() {
                                     >
                                         Create Account
                                     </button>
+                                ) : !acc.exists ? (
+                                    <div className="flex-1 px-3 py-2 bg-gray-100 text-gray-600 text-xs rounded-lg text-center">
+                                        Login Once With Google
+                                    </div>
                                 ) : (
                                     <button
                                         onClick={() => resetTestUser(acc.email, acc.tier)}
                                         disabled={actionLoading}
                                         className="flex-1 px-3 py-2 bg-orange-600 text-white text-xs rounded-lg hover:bg-orange-700 flex items-center justify-center gap-1"
                                     >
-                                        <RefreshCw className="w-3 h-3" /> Reset
+                                        <RefreshCw className="w-3 h-3" /> {acc.reset_mode === 'manual' ? 'Reset QA Account' : 'Reset'}
                                     </button>
                                 )}
                             </div>
@@ -543,7 +570,7 @@ export default function AdminDashboard() {
 
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                     <p className="text-amber-800 text-sm">
-                        <strong>Note:</strong> Test accounts use password-based login. After creating, you can log in via the magic link or set a password in Supabase.
+                        <strong>Note:</strong> `ardhsayar@gmail.com` is intended to stay as a real Google account. Reset clears app-owned state only; Google sign-in and the auth identity stay intact.
                     </p>
                 </div>
             </div>
@@ -1192,7 +1219,7 @@ export default function AdminDashboard() {
                                                 onClick={() => addTargetUser(u.user_id)}
                                                 className="w-full text-left px-4 py-2 hover:bg-gray-50"
                                             >
-                                                {u.email} <span className="text-gray-400 text-sm">({u.current_tier})</span>
+                                                {u.email || 'Unknown email'} <span className="text-gray-400 text-sm">({u.current_tier})</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1490,6 +1517,7 @@ export default function AdminDashboard() {
                                         <tr>
                                             <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Email</th>
                                             <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Plan</th>
+                                            <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Credits</th>
                                             <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Last Active</th>
                                             <th className="text-left px-6 py-3 text-sm font-medium text-gray-500">Actions</th>
                                         </tr>
@@ -1497,14 +1525,14 @@ export default function AdminDashboard() {
                                     <tbody className="divide-y divide-gray-100">
                                         {users.length === 0 ? (
                                             <tr>
-                                                <td colSpan={4} className="px-6 py-8 text-center text-gray-500">
+                                                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
                                                     Search for users by email
                                                 </td>
                                             </tr>
                                         ) : (
                                             users.map(u => (
                                                 <tr key={u.user_id} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 text-sm">{u.email}</td>
+                                                    <td className="px-6 py-4 text-sm">{u.email || 'Unknown email'}</td>
                                                     <td className="px-6 py-4">
                                                         <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${u.current_tier === 'pro' ? 'bg-purple-100 text-purple-700' :
                                                             u.current_tier === 'basic' ? 'bg-blue-100 text-blue-700' :
@@ -1512,6 +1540,10 @@ export default function AdminDashboard() {
                                                             }`}>
                                                             {u.current_tier || 'free'}
                                                         </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm">
+                                                        <div className="font-medium text-gray-900">{u.active_credits ?? 0} active</div>
+                                                        <div className="text-xs text-amber-600">{u.bonus_credits ?? 0} bonus</div>
                                                     </td>
                                                     <td className="px-6 py-4 text-sm text-gray-500">
                                                         {u.last_active_at ? new Date(u.last_active_at).toLocaleDateString() : 'Never'}
@@ -1703,7 +1735,7 @@ export default function AdminDashboard() {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
                         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
-                            <h3 className="text-lg font-semibold">{selectedUser.user?.email}</h3>
+                            <h3 className="text-lg font-semibold">{selectedUser.user?.email || 'Unknown email'}</h3>
                             <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-gray-100 rounded-lg">
                                 <X className="w-5 h-5" />
                             </button>

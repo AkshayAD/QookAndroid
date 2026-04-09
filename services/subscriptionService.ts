@@ -49,6 +49,35 @@ export interface LaunchOfferSettings {
 
 export type FeatureAccessMatrix = Partial<Record<BillingFeature, string[]>>;
 
+const STATIC_SUBSCRIPTION_CACHE_TTL_MS = 5 * 60 * 1000;
+const CREDIT_SUMMARY_CACHE_TTL_MS = 15 * 1000;
+
+type TimedCacheEntry<T> = {
+    value: T;
+    fetchedAt: number;
+};
+
+let subscriptionPlansCache: TimedCacheEntry<SubscriptionPlan[]> | null = null;
+let subscriptionPlansPromise: Promise<SubscriptionPlan[]> | null = null;
+let featureMatrixCache: TimedCacheEntry<FeatureAccessMatrix | null> | null = null;
+let featureMatrixPromise: Promise<FeatureAccessMatrix | null> | null = null;
+let launchOfferCache: TimedCacheEntry<LaunchOfferSettings | null> | null = null;
+let launchOfferPromise: Promise<LaunchOfferSettings | null> | null = null;
+let userCreditsCache = new Map<string, TimedCacheEntry<UserCredits | null>>();
+let userCreditsPromises = new Map<string, Promise<UserCredits | null>>();
+
+function isStaticCacheFresh<T>(entry: TimedCacheEntry<T> | null): entry is TimedCacheEntry<T> {
+    return Boolean(entry && Date.now() - entry.fetchedAt < STATIC_SUBSCRIPTION_CACHE_TTL_MS);
+}
+
+function isCreditSummaryCacheFresh(entry: TimedCacheEntry<UserCredits | null> | undefined): entry is TimedCacheEntry<UserCredits | null> {
+    return Boolean(entry && Date.now() - entry.fetchedAt < CREDIT_SUMMARY_CACHE_TTL_MS);
+}
+
+function getUserCreditsCacheKey(userId: string, familyGroupId: string | null): string {
+    return `${userId}:${familyGroupId ?? 'personal'}`;
+}
+
 function normalizeFeatureList(features: unknown): string[] {
     if (Array.isArray(features)) {
         return features.filter((item): item is string => typeof item === 'string');
@@ -167,6 +196,7 @@ async function getFallbackPersonalCreditSummary(userId: string): Promise<UserCre
             .from('user_credits')
             .select('credits, meal_credits, credit_type, expires_at, family_group_id')
             .eq('user_id', userId)
+            .is('deleted_at', null)
             .is('family_group_id', null),
     ]);
 
@@ -336,19 +366,40 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
         return [];
     }
 
-    const { data, error } = await supabase
-        .from('subscription_plans')
-        .select(PLAN_SELECT)
-        .eq('is_active', true)
-        .order('sort_order', { ascending: true, nullsFirst: false })
-        .order('price_inr', { ascending: true });
-
-    if (error) {
-        console.error('Error fetching plans:', error);
-        return [];
+    if (isStaticCacheFresh(subscriptionPlansCache)) {
+        return subscriptionPlansCache.value;
     }
 
-    return (data || []).map(mapPlan);
+    if (subscriptionPlansPromise) {
+        return subscriptionPlansPromise;
+    }
+
+    subscriptionPlansPromise = (async () => {
+        const { data, error } = await supabase
+            .from('subscription_plans')
+            .select(PLAN_SELECT)
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true, nullsFirst: false })
+            .order('price_inr', { ascending: true });
+
+        if (error) {
+            console.error('Error fetching plans:', error);
+            return [];
+        }
+
+        const mappedPlans = (data || []).map(mapPlan);
+        subscriptionPlansCache = {
+            value: mappedPlans,
+            fetchedAt: Date.now(),
+        };
+        return mappedPlans;
+    })();
+
+    try {
+        return await subscriptionPlansPromise;
+    } finally {
+        subscriptionPlansPromise = null;
+    }
 }
 
 export async function getSubscriptionPlanById(planId: string): Promise<SubscriptionPlan | null> {
@@ -394,18 +445,39 @@ export async function getLaunchOfferSettings(): Promise<LaunchOfferSettings | nu
         return null;
     }
 
-    const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'launch_offer')
-        .single();
-
-    if (error || !data) {
-        console.error('Error fetching launch offer settings:', error);
-        return null;
+    if (isStaticCacheFresh(launchOfferCache)) {
+        return launchOfferCache.value;
     }
 
-    return data.value as LaunchOfferSettings;
+    if (launchOfferPromise) {
+        return launchOfferPromise;
+    }
+
+    launchOfferPromise = (async () => {
+        const { data, error } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'launch_offer')
+            .maybeSingle();
+
+        if (error) {
+            console.error('Error fetching launch offer settings:', error);
+            return null;
+        }
+
+        const launchOffer = data ? (data.value as LaunchOfferSettings) : null;
+        launchOfferCache = {
+            value: launchOffer,
+            fetchedAt: Date.now(),
+        };
+        return launchOffer;
+    })();
+
+    try {
+        return await launchOfferPromise;
+    } finally {
+        launchOfferPromise = null;
+    }
 }
 
 export async function createTrialSubscription(userId: string): Promise<boolean> {
@@ -481,53 +553,143 @@ export async function getEnabledFeatureMatrix(): Promise<FeatureAccessMatrix | n
         return null;
     }
 
-    const { data, error } = await supabase
-        .from('feature_tier_access')
-        .select('feature_id, tier_id')
-        .eq('enabled', true);
-
-    if (error) {
-        console.error('Error fetching feature matrix:', error);
-        return null;
+    if (isStaticCacheFresh(featureMatrixCache)) {
+        return featureMatrixCache.value;
     }
 
-    const matrix: FeatureAccessMatrix = {};
-    for (const row of data || []) {
-        const featureId = row.feature_id as BillingFeature;
-        if (!matrix[featureId]) {
-            matrix[featureId] = [];
+    if (featureMatrixPromise) {
+        return featureMatrixPromise;
+    }
+
+    featureMatrixPromise = (async () => {
+        const { data, error } = await supabase
+            .from('feature_tier_access')
+            .select('feature_id, tier_id')
+            .eq('enabled', true);
+
+        if (error) {
+            console.error('Error fetching feature matrix:', error);
+            return null;
         }
-        matrix[featureId]!.push(row.tier_id);
-    }
 
-    if (Object.keys(matrix).length === 0) {
-        return DEFAULT_FEATURE_TIERS;
-    }
+        const matrix: FeatureAccessMatrix = {};
+        for (const row of data || []) {
+            const featureId = row.feature_id as BillingFeature;
+            if (!matrix[featureId]) {
+                matrix[featureId] = [];
+            }
+            matrix[featureId]!.push(row.tier_id);
+        }
 
-    return matrix;
+        const resolvedMatrix = Object.keys(matrix).length === 0 ? DEFAULT_FEATURE_TIERS : matrix;
+        featureMatrixCache = {
+            value: resolvedMatrix,
+            fetchedAt: Date.now(),
+        };
+        return resolvedMatrix;
+    })();
+
+    try {
+        return await featureMatrixPromise;
+    } finally {
+        featureMatrixPromise = null;
+    }
 }
 
-export async function getUserCredits(userId: string, familyGroupId: string | null = null): Promise<UserCredits | null> {
+export async function getUserCredits(
+    userId: string,
+    familyGroupId: string | null = null,
+    options?: { force?: boolean }
+): Promise<UserCredits | null> {
     if (!supabase) {
         return null;
     }
 
-    const { data, error } = await supabase.rpc('get_credit_summary', {
-        p_user_id: userId,
-        p_family_group_id: familyGroupId,
-    });
+    const cacheKey = getUserCreditsCacheKey(userId, familyGroupId);
 
-    if (error) {
-        console.error('Error fetching credits:', error);
-        return familyGroupId ? null : getFallbackPersonalCreditSummary(userId);
+    if (!options?.force) {
+        const cachedEntry = userCreditsCache.get(cacheKey);
+        if (isCreditSummaryCacheFresh(cachedEntry)) {
+            return cachedEntry.value;
+        }
+
+        const inflightRequest = userCreditsPromises.get(cacheKey);
+        if (inflightRequest) {
+            return inflightRequest;
+        }
     }
 
-    const summary = Array.isArray(data) ? data[0] : data;
-    if (summary) {
-        return mapCreditSummary(summary);
-    }
+    const requestPromise = (async () => {
+        const { data, error } = await supabase.rpc('get_credit_summary', {
+            p_user_id: userId,
+            p_family_group_id: familyGroupId,
+        });
 
-    return familyGroupId ? null : getFallbackPersonalCreditSummary(userId);
+        if (error) {
+            console.error('Error fetching credits:', error);
+            const fallbackResult = familyGroupId ? null : await getFallbackPersonalCreditSummary(userId);
+            userCreditsCache.set(cacheKey, {
+                value: fallbackResult,
+                fetchedAt: Date.now(),
+            });
+            return fallbackResult;
+        }
+
+        const summary = Array.isArray(data) ? data[0] : data;
+        const mappedSummary = summary ? mapCreditSummary(summary) : null;
+
+        if (!familyGroupId) {
+            if (!mappedSummary) {
+                const fallbackSummary = await getFallbackPersonalCreditSummary(userId);
+                userCreditsCache.set(cacheKey, {
+                    value: fallbackSummary,
+                    fetchedAt: Date.now(),
+                });
+                return fallbackSummary;
+            }
+
+            if (mappedSummary.total_credits <= 0) {
+                const fallbackSummary = await getFallbackPersonalCreditSummary(userId);
+                if (fallbackSummary && fallbackSummary.total_credits > 0) {
+                    const mergedSummary = {
+                        ...mappedSummary,
+                        total_credits: fallbackSummary.total_credits,
+                        subscription_credits: fallbackSummary.subscription_credits,
+                        purchased_credits: fallbackSummary.purchased_credits,
+                        bonus_credits: fallbackSummary.bonus_credits,
+                        trial_credits: fallbackSummary.trial_credits,
+                        referral_credits: fallbackSummary.referral_credits,
+                        total_meal_credits: fallbackSummary.total_meal_credits,
+                    };
+                    userCreditsCache.set(cacheKey, {
+                        value: mergedSummary,
+                        fetchedAt: Date.now(),
+                    });
+                    return mergedSummary;
+                }
+            }
+
+            userCreditsCache.set(cacheKey, {
+                value: mappedSummary,
+                fetchedAt: Date.now(),
+            });
+            return mappedSummary;
+        }
+
+        userCreditsCache.set(cacheKey, {
+            value: mappedSummary,
+            fetchedAt: Date.now(),
+        });
+        return mappedSummary;
+    })();
+
+    userCreditsPromises.set(cacheKey, requestPromise);
+
+    try {
+        return await requestPromise;
+    } finally {
+        userCreditsPromises.delete(cacheKey);
+    }
 }
 
 export async function consumeCredits(

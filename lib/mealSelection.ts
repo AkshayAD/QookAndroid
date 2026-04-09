@@ -1,6 +1,8 @@
 import type { DayPlan, MealAlternatives, PrepAhead, WeeklyPlan } from '../types';
 
 export type SelectableMealType = 'breakfast' | 'lunch' | 'dinner';
+export type SparseMealAlternatives = Partial<Record<SelectableMealType, string[]>>;
+export type SparseMealUpdates = Partial<Record<SelectableMealType, string>>;
 
 export const ALL_MEAL_TYPES: SelectableMealType[] = ['breakfast', 'lunch', 'dinner'];
 
@@ -9,6 +11,10 @@ const MEAL_LABELS: Record<SelectableMealType, string> = {
   lunch: 'Lunch',
   dinner: 'Dinner',
 };
+
+export function getMealTypeLabel(mealType: SelectableMealType): string {
+  return MEAL_LABELS[mealType];
+}
 
 function normalizeMealType(value: unknown): SelectableMealType | null {
   if (typeof value !== 'string') {
@@ -127,15 +133,22 @@ export function normalizeDayForSelectedMeals<T extends DayPlan>(
   };
 }
 
+export function normalizeWeeklyPlanForSelectedMeals<T extends WeeklyPlan>(plan: T, values?: Array<string | null | undefined>, showPrepReminders?: boolean): T;
 export function normalizeWeeklyPlanForSelectedMeals(
   plan?: WeeklyPlan | null,
   values?: Array<string | null | undefined>,
+  showPrepReminders?: boolean
+): WeeklyPlan;
+export function normalizeWeeklyPlanForSelectedMeals<T extends WeeklyPlan>(
+  plan?: T | WeeklyPlan | null,
+  values?: Array<string | null | undefined>,
   showPrepReminders: boolean = true
-): WeeklyPlan {
+): T | WeeklyPlan {
   return {
+    ...(plan || {}),
     days: (plan?.days || []).map((day) => normalizeDayForSelectedMeals(day, values, showPrepReminders)),
     alternatives: normalizeAlternativesForSelectedMeals(plan?.alternatives, values),
-  };
+  } as T | WeeklyPlan;
 }
 
 export function normalizeAlternativesForSelectedMeals(
@@ -148,6 +161,30 @@ export function normalizeAlternativesForSelectedMeals(
     breakfast: selectedMeals.includes('breakfast') ? alternatives?.breakfast || [] : [],
     lunch: selectedMeals.includes('lunch') ? alternatives?.lunch || [] : [],
     dinner: selectedMeals.includes('dinner') ? alternatives?.dinner || [] : [],
+  };
+}
+
+export function normalizeSparseAlternativesForSelectedMeals(
+  alternatives?: Partial<Record<SelectableMealType, string[]>> | null,
+  values?: Array<string | null | undefined>
+): SparseMealAlternatives {
+  const selectedMeals = normalizeSelectedMeals(values);
+
+  return selectedMeals.reduce((result, mealType) => {
+    result[mealType] = alternatives?.[mealType] || [];
+    return result;
+  }, {} as SparseMealAlternatives);
+}
+
+export function applySparseMealUpdatesToDay<T extends DayPlan>(
+  day: T,
+  updates: SparseMealUpdates
+): T {
+  return {
+    ...day,
+    breakfast: updates.breakfast !== undefined ? updates.breakfast : day.breakfast || '',
+    lunch: updates.lunch !== undefined ? updates.lunch : day.lunch || '',
+    dinner: updates.dinner !== undefined ? updates.dinner : day.dinner || '',
   };
 }
 

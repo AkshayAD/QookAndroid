@@ -9,10 +9,13 @@ import { useEffect, useCallback, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
     completeTrustAction,
+    recordMenuGenerationAndMaybeAwardSecondMenu,
     hasCompletedAction,
     checkReturn24hEligibility,
     TrustActionType,
-    TRUST_ACTION_LABELS
+    TRUST_ACTION_LABELS,
+    hashPhoneNumber,
+    type MenuGenerationEventInput,
 } from '../services/trustActions';
 import { registerDevice, markTrialGranted, isDeviceEligibleForTrial } from '../services/deviceFingerprint';
 import { supabase } from '../lib/supabase';
@@ -57,46 +60,20 @@ export function useSignupTrustAction() {
 }
 
 /**
- * Hook to check and award profile completion credits
- */
-export function useProfileCompleteTrustAction() {
-    const { user } = useAuth();
-
-    return useCallback(async () => {
-        if (!user) return;
-
-        const result = await completeTrustAction(user.id, 'complete_profile');
-
-        if (result.creditsAwarded > 0) {
-            showCreditToast('complete_profile', result.creditsAwarded);
-        }
-
-        return result;
-    }, [user]);
-}
-
-/**
  * Hook to track menu generation and award credits on 2nd generation
- * Checks database count of weekly_plans to work across devices
+ * Uses the current successful generation flow as the primary tracker,
+ * with a legacy weekly_plans fallback for older accounts.
  */
 export function useSecondMenuTrustAction() {
     const { user } = useAuth();
 
-    return useCallback(async () => {
+    return useCallback(async (input: Omit<MenuGenerationEventInput, 'userId'>) => {
         if (!user) return;
 
-        // Check if already completed to avoid unnecessary DB call
-        const alreadyDone = await hasCompletedAction(user.id, 'generate_second_menu');
-        if (alreadyDone) return;
-
-        // Get count from database (works across devices)
-        const { getUserGenerationCount } = await import('../services/trustActions');
-        const count = await getUserGenerationCount(user.id);
-
-        // Only award on exactly 2nd generation
-        if (count !== 2) return;
-
-        const result = await completeTrustAction(user.id, 'generate_second_menu');
+        const result = await recordMenuGenerationAndMaybeAwardSecondMenu({
+            ...input,
+            userId: user.id,
+        });
 
         if (result.creditsAwarded > 0) {
             showCreditToast('generate_second_menu', result.creditsAwarded);
@@ -124,50 +101,6 @@ export function useShareMenuTrustAction() {
 
         return result;
     }, [user]);
-}
-
-/**
- * Hook to handle PWA install trust action
- */
-export function usePWAInstallTrustAction() {
-    const { user } = useAuth();
-    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-    const [canInstall, setCanInstall] = useState(false);
-
-    useEffect(() => {
-        const handler = (e: Event) => {
-            e.preventDefault();
-            setDeferredPrompt(e);
-            setCanInstall(true);
-        };
-
-        window.addEventListener('beforeinstallprompt', handler);
-        return () => window.removeEventListener('beforeinstallprompt', handler);
-    }, []);
-
-    const installPWA = useCallback(async () => {
-        if (!deferredPrompt || !user) return false;
-
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-
-        if (outcome === 'accepted') {
-            // Award credits
-            const result = await completeTrustAction(user.id, 'install_pwa');
-
-            if (result.creditsAwarded > 0) {
-                showCreditToast('install_pwa', result.creditsAwarded);
-            }
-
-            setDeferredPrompt(null);
-            setCanInstall(false);
-            return true;
-        }
-
-        return false;
-    }, [deferredPrompt, user]);
-
-    return { canInstall, installPWA };
 }
 
 /**
@@ -224,24 +157,57 @@ export function usePhoneTrustSync() {
 
         async function syncPhone() {
             try {
-                // Check if user already has add_phone action
-                const alreadyHasCredit = await hasCompletedAction(user!.id, 'add_phone');
-                if (alreadyHasCredit) {
-                    setSynced(true);
-                    return;
-                }
-
-                // Check if user has phone in profile
                 const { data: profile } = await supabase
                     .from('user_profiles')
                     .select('phone, phone_hash')
                     .eq('id', user!.id)
                     .single();
 
-                if (profile?.phone && profile?.phone_hash) {
+                const normalizedProfilePhone = profile?.phone?.replace(/\D/g, '') || '';
+
+                // Check if user already has add_phone action
+                const alreadyHasCredit = await hasCompletedAction(user!.id, 'add_phone');
+                if (alreadyHasCredit) {
+                    const { data: actionRecord } = await supabase
+                        .from('user_trust_actions')
+                        .select('metadata')
+                        .eq('user_id', user!.id)
+                        .eq('action_type', 'add_phone')
+                        .maybeSingle();
+
+                    const metadataPhone = typeof actionRecord?.metadata?.phone === 'string'
+                        ? actionRecord.metadata.phone.replace(/\D/g, '')
+                        : '';
+                    const recoveredPhone = normalizedProfilePhone || metadataPhone;
+
+                    // Historical bug: some users received the trust credit but their profile phone was never persisted.
+                    if (recoveredPhone && (!normalizedProfilePhone || !profile?.phone_hash)) {
+                        const phoneHash = await hashPhoneNumber(recoveredPhone);
+                        await supabase
+                            .from('user_profiles')
+                            .upsert({
+                                id: user!.id,
+                                phone: recoveredPhone,
+                                phone_hash: phoneHash
+                            });
+                    }
+
+                    setSynced(true);
+                    return;
+                }
+
+                if (normalizedProfilePhone) {
+                    if (!profile?.phone_hash) {
+                        const phoneHash = await hashPhoneNumber(normalizedProfilePhone);
+                        await supabase
+                            .from('user_profiles')
+                            .update({ phone_hash: phoneHash })
+                            .eq('id', user!.id);
+                    }
+
                     // User has phone but no credit - award retroactively
                     const result = await completeTrustAction(user!.id, 'add_phone', {
-                        phone: profile.phone,
+                        phone: normalizedProfilePhone,
                         retroactive: true
                     });
 

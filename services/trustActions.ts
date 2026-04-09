@@ -5,15 +5,15 @@
  * by completing trust-building actions. This discourages trial abuse
  * while maintaining a good user experience.
  * 
- * Actions and Credits:
+ * Active actions and credits:
  * - signup: +2 (immediate)
- * - complete_profile: +1 (after completing profile wizard)
- * - add_phone: +2 (after adding phone number)  
+ * - add_phone: +2 (after adding phone number)
  * - generate_second_menu: +1 (generating 2nd meal plan)
  * - share_menu_commands: +1 (sharing meal plan or grocery list)
- * - install_pwa: +1 (installing as PWA)
- * 
- * Total possible: 8 credits (matches original trial amount)
+ *
+ * Active total possible: 6 credits
+ * Legacy actions such as complete_profile/install_pwa are preserved only for
+ * historical users who already earned them.
  */
 
 import { supabase } from '../lib/supabase';
@@ -57,6 +57,77 @@ export interface TrustProgress {
     maxPossibleCredits: number;
 }
 
+export interface CompleteTrustActionResult {
+    creditsAwarded: number;
+    alreadyCompleted: boolean;
+    completedAt?: string | null;
+}
+
+export type MenuGenerationSource = 'onboarding_auto' | 'manual_generate';
+
+export interface MenuGenerationEventInput {
+    requestId: string;
+    userId: string;
+    weekStartDate: string;
+    source: MenuGenerationSource;
+    familyGroupId?: string | null;
+}
+
+export const ACTIVE_TRUST_ACTIONS: TrustActionType[] = [
+    'signup',
+    'add_phone',
+    'generate_second_menu',
+    'share_menu_commands',
+];
+
+function emitTrustActionEvents() {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    window.dispatchEvent(new CustomEvent('trust-actions-updated'));
+    window.dispatchEvent(new CustomEvent('refresh-credits'));
+}
+
+export function createTrustProgress(completed: TrustAction[]): TrustProgress {
+    const activeCompleted = completed.filter((action) => ACTIVE_TRUST_ACTIONS.includes(action.action_type));
+    const completedTypes = new Set(activeCompleted.map((action) => action.action_type));
+
+    return {
+        completed: activeCompleted,
+        pending: ACTIVE_TRUST_ACTIONS.filter((action) => !completedTypes.has(action)),
+        totalCreditsEarned: activeCompleted.reduce((sum, action) => sum + action.credits_awarded, 0),
+        maxPossibleCredits: ACTIVE_TRUST_ACTIONS.reduce((sum, action) => sum + TRUST_ACTION_CREDITS[action], 0),
+    };
+}
+
+export function deriveMenuGenerationCount(options: {
+    durableCount: number;
+    legacyCount: number;
+    hasOnboardingCompleted: boolean;
+    hasSavedSchedule: boolean;
+}): number {
+    const { durableCount, legacyCount, hasOnboardingCompleted, hasSavedSchedule } = options;
+    const onboardingBaseline = durableCount === 0 && legacyCount === 0 && hasOnboardingCompleted && hasSavedSchedule
+        ? 1
+        : 0;
+
+    return Math.max(durableCount, legacyCount, onboardingBaseline);
+}
+
+/**
+ * Hash a phone number after normalizing it to digits only.
+ * Used to keep phone trust-action checks consistent across the app.
+ */
+export async function hashPhoneNumber(phone: string): Promise<string> {
+    const normalized = phone.replace(/\D/g, '');
+    const encoder = new TextEncoder();
+    const data = encoder.encode(normalized);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
 /**
  * Get the user's current trust action progress
  */
@@ -66,23 +137,7 @@ export async function getTrustProgress(userId: string): Promise<TrustProgress> {
         .select('action_type, credits_awarded, completed_at')
         .eq('user_id', userId);
 
-    const completedTypes = new Set((completed || []).map(a => a.action_type));
-
-    const pending = (Object.keys(TRUST_ACTION_CREDITS) as TrustActionType[])
-        .filter(action => !completedTypes.has(action));
-
-    const totalCreditsEarned = (completed || [])
-        .reduce((sum, a) => sum + a.credits_awarded, 0);
-
-    const maxPossibleCredits = Object.values(TRUST_ACTION_CREDITS)
-        .reduce((sum, credits) => sum + credits, 0);
-
-    return {
-        completed: completed || [],
-        pending,
-        totalCreditsEarned,
-        maxPossibleCredits
-    };
+    return createTrustProgress(completed || []);
 }
 
 /**
@@ -97,7 +152,7 @@ export async function hasCompletedAction(
         .select('id')
         .eq('user_id', userId)
         .eq('action_type', action)
-        .single();
+        .maybeSingle();
 
     return !!data;
 }
@@ -110,52 +165,29 @@ export async function completeTrustAction(
     userId: string,
     action: TrustActionType,
     metadata: Record<string, unknown> = {}
-): Promise<{ creditsAwarded: number; alreadyCompleted: boolean }> {
-    // Check if already completed
-    const alreadyDone = await hasCompletedAction(userId, action);
-    if (alreadyDone) {
-        return { creditsAwarded: 0, alreadyCompleted: true };
-    }
-
-    const credits = TRUST_ACTION_CREDITS[action];
-
-    // Record the action
-    const { error } = await supabase.from('user_trust_actions').insert({
-        user_id: userId,
-        action_type: action,
-        credits_awarded: credits,
-        metadata
+): Promise<CompleteTrustActionResult> {
+    const { data, error } = await supabase.rpc('complete_trust_action_once', {
+        p_action_type: action,
+        p_metadata: metadata,
     });
 
     if (error) {
-        console.error('Failed to record trust action:', error);
+        console.error('Failed to complete trust action via RPC:', error);
         return { creditsAwarded: 0, alreadyCompleted: false };
     }
 
-    // Award the credits to user_credits table
-    await awardTrustCredits(userId, credits, action);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+        return { creditsAwarded: 0, alreadyCompleted: false };
+    }
 
-    return { creditsAwarded: credits, alreadyCompleted: false };
-}
+    emitTrustActionEvents();
 
-/**
- * Award trust credits to the user's credit balance
- */
-async function awardTrustCredits(
-    userId: string,
-    amount: number,
-    source: TrustActionType
-): Promise<void> {
-    // Calculate expiry (28 days from now, same as trial)
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 28);
-
-    await supabase.from('user_credits').insert({
-        user_id: userId,
-        credit_type: 'bonus',
-        meal_credits: amount,
-        expires_at: expiresAt.toISOString()
-    });
+    return {
+        creditsAwarded: Number(row.credits_awarded ?? 0),
+        alreadyCompleted: Boolean(row.already_completed),
+        completedAt: row.completed_at ?? null,
+    };
 }
 
 /**
@@ -207,8 +239,9 @@ export async function isManualMealSave(
 }
 
 /**
- * Get the count of meal plans generated by a user
- * Used for tracking 2nd menu generation trust action
+ * Get the legacy count of generated weekly plans for a user.
+ * The current planner flow now tracks successful generations locally first,
+ * but this preserves historical cross-device progress from older builds.
  */
 export async function getUserGenerationCount(userId: string): Promise<number> {
     const { count, error } = await supabase
@@ -224,3 +257,125 @@ export async function getUserGenerationCount(userId: string): Promise<number> {
     return count || 0;
 }
 
+export async function recordMenuGenerationEvent({
+    requestId,
+    userId,
+    weekStartDate,
+    source,
+    familyGroupId = null,
+}: MenuGenerationEventInput): Promise<void> {
+    const { error } = await supabase
+        .from('menu_generation_events')
+        .upsert({
+            request_id: requestId,
+            user_id: userId,
+            family_group_id: familyGroupId,
+            week_start_date: weekStartDate,
+            source,
+        }, { onConflict: 'request_id', ignoreDuplicates: false });
+
+    if (error) {
+        console.error('Failed to record menu generation event:', error);
+        throw error;
+    }
+}
+
+export interface RecordMenuGenerationResult {
+    eventRecorded: boolean;
+    milestoneCount: number;
+    creditsAwarded: number;
+    alreadyCompleted: boolean;
+}
+
+export async function recordMenuGenerationAndMaybeAwardSecondMenu({
+    requestId,
+    userId,
+    weekStartDate,
+    source,
+    familyGroupId = null,
+}: MenuGenerationEventInput): Promise<RecordMenuGenerationResult> {
+    const { data, error } = await supabase.rpc('record_menu_generation_and_maybe_award_second_menu', {
+        p_request_id: requestId,
+        p_week_start_date: weekStartDate,
+        p_source: source,
+        p_family_group_id: familyGroupId,
+    });
+
+    if (error) {
+        console.error('Failed to record menu generation milestone via RPC:', error);
+        throw error;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const result: RecordMenuGenerationResult = {
+        eventRecorded: Boolean(row?.event_recorded),
+        milestoneCount: Number(row?.milestone_count ?? 0),
+        creditsAwarded: Number(row?.credits_awarded ?? 0),
+        alreadyCompleted: Boolean(row?.already_completed),
+    };
+
+    if (result.eventRecorded || result.creditsAwarded > 0) {
+        emitTrustActionEvents();
+    }
+
+    return result;
+}
+
+async function getDurableMenuGenerationCount(userId: string): Promise<number> {
+    const { count, error } = await supabase
+        .from('menu_generation_events')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error counting durable menu generations:', error);
+        return 0;
+    }
+
+    return count || 0;
+}
+
+async function getHasSavedSchedule(userId: string): Promise<boolean> {
+    const { count, error } = await supabase
+        .from('scheduled_meals')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+    if (error) {
+        console.error('Error checking saved schedule count:', error);
+        return false;
+    }
+
+    return (count || 0) > 0;
+}
+
+async function getHasCompletedOnboarding(userId: string): Promise<boolean> {
+    const { data, error } = await supabase
+        .from('user_settings')
+        .select('onboarding_completed')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Error checking onboarding status for menu generation count:', error);
+        return false;
+    }
+
+    return Boolean(data?.onboarding_completed);
+}
+
+export async function getMenuGenerationMilestoneCount(userId: string): Promise<number> {
+    const [durableCount, legacyCount, hasOnboardingCompleted, hasSavedSchedule] = await Promise.all([
+        getDurableMenuGenerationCount(userId),
+        getUserGenerationCount(userId),
+        getHasCompletedOnboarding(userId),
+        getHasSavedSchedule(userId),
+    ]);
+
+    return deriveMenuGenerationCount({
+        durableCount,
+        legacyCount,
+        hasOnboardingCompleted,
+        hasSavedSchedule,
+    });
+}

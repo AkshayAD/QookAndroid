@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Schedule, MealTransfer } from '../types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, startOfWeek, endOfWeek, addDays } from 'date-fns';
-import { ChevronLeft, ChevronRight, Sun, Moon, CloudSun, ArrowRightLeft, ShoppingCart, Loader2, X, CheckSquare, Pencil, Check, AlertCircle, RotateCcw, ClipboardList, Share2 } from 'lucide-react';
-import MealList from './MealList';
+import { ChevronLeft, ChevronRight, ShoppingCart, Loader2, X, CheckSquare, RotateCcw, Share2 } from 'lucide-react';
+import DayMealPreview from './DayMealPreview';
 import { useFamily } from '../contexts/FamilyContext';
 
 interface Props {
@@ -25,7 +25,6 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
     const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());
     const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
     const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
-    const [editingMeal, setEditingMeal] = useState<{ type: 'breakfast' | 'lunch' | 'dinner'; value: string } | null>(null);
     const todayRef = useRef<HTMLButtonElement>(null);
     const dateScrollRef = useRef<HTMLDivElement>(null);
     // Scroll to today when the date strip becomes visible
@@ -90,7 +89,6 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
             setSelectedDate(date);
             setSelectedDates(new Set());
             setIsMultiSelectMode(false);
-            setEditingMeal(null);
         }
     };
 
@@ -181,30 +179,7 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
         onGenerateGroceryFromWeek(weekDays);
     };
 
-    // Inline editing handlers
-    const startEditing = (type: 'breakfast' | 'lunch' | 'dinner', currentValue: string) => {
-        setEditingMeal({ type, value: currentValue || '' });
-    };
-
-    const saveEdit = () => {
-        if (!editingMeal || !selectedDate || !onMealUpdate) return;
-        const dateKey = format(selectedDate, 'yyyy-MM-dd');
-        onMealUpdate(dateKey, editingMeal.type, editingMeal.value);
-        setEditingMeal(null);
-    };
-
-    const cancelEdit = () => {
-        setEditingMeal(null);
-    };
-
     const selectedPlan = selectedDate && !isMultiSelectMode ? getDayPlan(selectedDate) : null;
-
-    const getWeekRange = () => {
-        if (!selectedDate) return '';
-        const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-        const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-        return `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`;
-    };
 
     return (
         <div className="grid lg:grid-cols-3 gap-4 lg:gap-6 lg:h-full small-screen-zoom">
@@ -497,135 +472,15 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
                     </>
                 ) : (
                     // Single select mode sidebar
-                    <>
-                        <div className="p-4 border-b bg-gray-50 flex justify-between items-start">
-                            <div>
-                                <h3 className="font-bold text-gray-800">
-                                    {selectedDate ? format(selectedDate, 'EEEE, MMM d') : 'Select a Day'}
-                                </h3>
-                                {/* Week range hidden - user preference */}
-                            </div>
-                            {selectedDate && onLoadWeek && (
-                                <button
-                                    onClick={() => onLoadWeek(selectedDate)}
-                                    className="flex items-center gap-1.5 px-3 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-indigo-200 hover:border-indigo-300 text-xs font-medium"
-                                    title="Open this week in the Weekly Planner tab"
-                                    aria-label="Open this week in Planner"
-                                >
-                                    <ClipboardList className="w-4 h-4" />
-                                    <span>Open next 7 days in planner</span>
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="p-4 flex-1 overflow-y-auto space-y-4">
-                            {!selectedDate ? (
-                                <p className="text-gray-400 text-sm text-center mt-10">Tap a date to view meals</p>
-                            ) : (
-                                <>
-                                    {(['breakfast', 'lunch', 'dinner'] as const).map(type => {
-                                        const meal = selectedPlan?.[type] || '';
-                                        const Icon = type === 'breakfast' ? Sun : type === 'lunch' ? CloudSun : Moon;
-                                        const colorClass = type === 'breakfast' ? 'text-amber-600' : type === 'lunch' ? 'text-orange-600' : 'text-indigo-600';
-                                        const label = type.charAt(0).toUpperCase() + type.slice(1);
-                                        const isEditing = editingMeal?.type === type;
-
-                                        return (
-                                            <div key={type} className="group relative bg-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-shadow">
-                                                <div className="flex justify-between items-start mb-2">
-                                                    <div className={`flex items-center gap-2 text-xs font-bold uppercase ${colorClass}`}>
-                                                        <Icon className="w-4 h-4" /> {label}
-                                                    </div>
-                                                    <div className="flex items-center gap-1">
-                                                        {onMealUpdate && !isEditing && (
-                                                            <button
-                                                                onClick={() => startEditing(type, meal)}
-                                                                className="text-gray-300 hover:text-green-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                title="Edit meal"
-                                                            >
-                                                                <Pencil className="w-4 h-4" />
-                                                            </button>
-                                                        )}
-                                                        {meal && (
-                                                            <button
-                                                                onClick={() => onInitiateTransfer({
-                                                                    sourceDate: format(selectedDate!, 'yyyy-MM-dd'),
-                                                                    sourceMealType: label as 'Breakfast' | 'Lunch' | 'Dinner',
-                                                                    sourceMealName: meal
-                                                                })}
-                                                                className="text-gray-300 hover:text-indigo-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                title="Move or Copy"
-                                                            >
-                                                                <ArrowRightLeft className="w-4 h-4" />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {isEditing ? (
-                                                    <div className="space-y-2">
-                                                        <input
-                                                            type="text"
-                                                            value={editingMeal.value}
-                                                            onChange={(e) => setEditingMeal({ ...editingMeal, value: e.target.value })}
-                                                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                                            autoFocus
-                                                            placeholder={`Enter ${label.toLowerCase()}...`}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') saveEdit();
-                                                                if (e.key === 'Escape') cancelEdit();
-                                                            }}
-                                                        />
-                                                        <div className="flex gap-1">
-                                                            <button
-                                                                onClick={saveEdit}
-                                                                className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 flex items-center gap-1"
-                                                            >
-                                                                <Check className="w-3 h-3" /> Save
-                                                            </button>
-                                                            <button
-                                                                onClick={cancelEdit}
-                                                                className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 flex items-center gap-1"
-                                                            >
-                                                                <X className="w-3 h-3" /> Cancel
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ) : meal ? (
-                                                    <MealList content={meal} />
-                                                ) : (
-                                                    <p className="text-gray-400 text-sm italic">No meal planned</p>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </>
-                            )}
-                        </div>
-
-                        {/* Generate Grocery List Button */}
-                        {selectedDate && onGenerateGroceryFromWeek && (
-                            <div className="p-4 border-t bg-gray-50">
-                                <button
-                                    onClick={handleGenerateWeekGrocery}
-                                    disabled={groceryLoading}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                                >
-                                    {groceryLoading ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Generating...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ShoppingCart className="w-4 h-4" />
-                                            Generate Grocery for This Week
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        )}
-                    </>
+                    <DayMealPreview
+                        selectedDate={selectedDate}
+                        dayPlan={selectedPlan}
+                        onInitiateTransfer={onInitiateTransfer}
+                        onMealUpdate={onMealUpdate}
+                        onOpenWeek={onLoadWeek}
+                        onGenerateWeekGrocery={onGenerateGroceryFromWeek ? handleGenerateWeekGrocery : undefined}
+                        groceryLoading={groceryLoading}
+                    />
                 )}
             </div>
         </div >

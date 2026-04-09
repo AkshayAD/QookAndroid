@@ -13,7 +13,7 @@ interface TourStep {
 const TOUR_STEPS: TourStep[] = [
     {
         id: 'welcome',
-        eyebrow: 'Guided walkthrough',
+        eyebrow: 'App tour',
         title: 'Qook now teaches in the planner',
         description: 'You do not need to memorize hidden menus anymore. The main planner surfaces the next best action at the right time.',
     },
@@ -91,9 +91,6 @@ export default function OnboardingTour({
     }, [currentAction, step.triggerAction]);
 
     const finishTour = () => {
-        if (!forceShow) {
-            localStorage.setItem('qook_tour_completed', 'true');
-        }
         onComplete();
     };
 
@@ -193,12 +190,4 @@ export default function OnboardingTour({
             </div>
         </div>
     );
-}
-
-export function shouldShowTour(): boolean {
-    return localStorage.getItem('qook_tour_completed') !== 'true';
-}
-
-export function resetTour(): void {
-    localStorage.removeItem('qook_tour_completed');
 }

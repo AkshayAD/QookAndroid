@@ -18,6 +18,77 @@ interface AdminAction {
     payload?: any;
 }
 
+type AdminCreditSourceType = 'bonus' | 'pack' | 'trial' | 'admin';
+type StoredCreditType = 'bonus' | 'purchased' | 'trial';
+
+function normalizeStoredCreditType(sourceType?: AdminCreditSourceType): StoredCreditType {
+    switch (sourceType) {
+        case 'pack':
+            return 'purchased';
+        case 'trial':
+            return 'trial';
+        case 'bonus':
+        case 'admin':
+        default:
+            return 'bonus';
+    }
+}
+
+function resolveCreditExpiry(sourceType?: AdminCreditSourceType, expiresAt?: string): string | null {
+    if (expiresAt) {
+        const parsedDate = new Date(expiresAt);
+        if (Number.isNaN(parsedDate.getTime())) {
+            throw new Error('Invalid expiry date');
+        }
+        return parsedDate.toISOString();
+    }
+
+    if (sourceType === 'pack') {
+        return null;
+    }
+
+    const defaultDays = sourceType === 'bonus' ? 7 : 30;
+    return new Date(Date.now() + defaultDays * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function normalizeEmail(email: string | null | undefined): string {
+    return (email ?? '').trim();
+}
+
+async function listAuthUsers(supabase: any) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) {
+        throw error;
+    }
+
+    return data?.users || [];
+}
+
+function sumCreditColumns(row: {
+    meal_credits?: number | null;
+    grocery_credits?: number | null;
+    edit_credits?: number | null;
+    regen_credits?: number | null;
+}) {
+    return Number(row.meal_credits ?? 0)
+        + Number(row.grocery_credits ?? 0)
+        + Number(row.edit_credits ?? 0)
+        + Number(row.regen_credits ?? 0);
+}
+
+function buildCreditBalancePatch(
+    creditType: 'meal' | 'grocery' | 'edit' | 'regen',
+    amount: number
+): Record<string, number> {
+    return {
+        credits: creditType === 'meal' ? amount : 0,
+        meal_credits: creditType === 'meal' ? amount : 0,
+        grocery_credits: creditType === 'grocery' ? amount : 0,
+        edit_credits: creditType === 'edit' ? amount : 0,
+        regen_credits: creditType === 'regen' ? amount : 0,
+    };
+}
+
 export default async function handler(req: any, res: any) {
     // CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -47,7 +118,7 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase: any = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
         // Step 1: Verify the user is an admin
@@ -134,7 +205,7 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'reset_test_user':
-                result = await resetTestUser(supabase, payload.email, payload.tier);
+                result = await resetTestUser(supabase, userId, adminEmail, payload.email, payload.tier);
                 break;
 
             case 'list_admins':
@@ -188,10 +259,6 @@ export default async function handler(req: any, res: any) {
 
             case 'cancel_razorpay':
                 result = await cancelRazorpaySubscription(supabase, userId, adminEmail, payload.targetUserId);
-                break;
-
-            case 'modify_credits':
-                result = await modifyCredits(supabase, userId, adminEmail, payload);
                 break;
 
             // Feature Matrix Management
@@ -259,7 +326,8 @@ async function listUsers(supabase: any, payload: any) {
             current_tier,
             last_active_at,
             total_generations
-        `)
+        `, { count: 'exact' })
+        .is('deleted_at', null)
         .order('last_active_at', { ascending: false, nullsFirst: false })
         .range(offset, offset + limit - 1);
 
@@ -282,16 +350,61 @@ async function listUsers(supabase: any, payload: any) {
                         .from('dim_users')
                         .update({ email: authUser.user.email })
                         .eq('user_id', user.user_id);
-                    return { ...user, email: authUser.user.email };
+                    return { ...user, email: normalizeEmail(authUser.user.email) };
                 }
             } catch (e) {
                 // Ignore errors, just return user without email
             }
         }
-        return user;
+        return { ...user, email: normalizeEmail(user.email) };
     }));
 
-    return { users: enrichedUsers, page, limit, total: count };
+    const userIds = enrichedUsers.map((user: any) => user.user_id).filter(Boolean);
+    const creditSummaryMap = new Map<string, { active_credits: number; bonus_credits: number }>();
+
+    if (userIds.length > 0) {
+        const { data: creditRows, error: creditError } = await supabase
+            .from('user_credits')
+            .select('user_id, credit_type, meal_credits, grocery_credits, edit_credits, regen_credits, expires_at')
+            .in('user_id', userIds)
+            .is('deleted_at', null);
+
+        if (creditError) throw creditError;
+
+        const now = Date.now();
+        for (const row of creditRows || []) {
+            const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : null;
+            const isActive = expiresAt === null || (Number.isFinite(expiresAt) && expiresAt > now);
+
+            if (!isActive) {
+                continue;
+            }
+
+            const totalForRow = sumCreditColumns(row);
+            const existing = creditSummaryMap.get(row.user_id) || { active_credits: 0, bonus_credits: 0 };
+            existing.active_credits += totalForRow;
+
+            if (row.credit_type === 'bonus') {
+                existing.bonus_credits += totalForRow;
+            }
+
+            creditSummaryMap.set(row.user_id, existing);
+        }
+    }
+
+    return {
+        users: enrichedUsers.map((user: any) => {
+            const creditSummary = creditSummaryMap.get(user.user_id);
+            return {
+                ...user,
+                active_credits: creditSummary?.active_credits ?? 0,
+                bonus_credits: creditSummary?.bonus_credits ?? 0,
+            };
+        }),
+        page,
+        limit,
+        total: count
+    };
 }
 
 async function searchUser(supabase: any, query: string) {
@@ -302,12 +415,18 @@ async function searchUser(supabase: any, query: string) {
     const { data: users, error } = await supabase
         .from('dim_users')
         .select('user_id, email, current_tier, last_active_at')
+        .is('deleted_at', null)
         .ilike('email', `%${query}%`)
         .limit(20);
 
     if (error) throw error;
 
-    return { users };
+    return {
+        users: (users || []).map((user: any) => ({
+            ...user,
+            email: normalizeEmail(user.email),
+        }))
+    };
 }
 
 async function getUserDetails(supabase: any, targetUserId: string) {
@@ -316,20 +435,27 @@ async function getUserDetails(supabase: any, targetUserId: string) {
         .from('dim_users')
         .select('*')
         .eq('user_id', targetUserId)
-        .single();
+        .is('deleted_at', null)
+        .maybeSingle();
+
+    if (!userInfo) {
+        throw new Error('User not found or already deleted');
+    }
 
     // Get subscription
     const { data: subscription } = await supabase
         .from('user_subscriptions')
         .select('*')
         .eq('user_id', targetUserId)
-        .single();
+        .is('deleted_at', null)
+        .maybeSingle();
 
     // Get all credits
     const { data: credits } = await supabase
         .from('user_credits')
         .select('*')
-        .eq('user_id', targetUserId);
+        .eq('user_id', targetUserId)
+        .is('deleted_at', null);
 
     // Get recent usage (last 30)
     const { data: usage } = await supabase
@@ -344,12 +470,12 @@ async function getUserDetails(supabase: any, targetUserId: string) {
         .from('fact_credit_transactions')
         .select('*')
         .eq('user_id', targetUserId)
-        .order('txn_ts', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(20);
 
     // Get meal plans count
     const { count: mealPlanCount } = await supabase
-        .from('meal_plans')
+        .from('weekly_plans')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', targetUserId);
 
@@ -363,7 +489,8 @@ async function getUserDetails(supabase: any, targetUserId: string) {
     const { data: profiles } = await supabase
         .from('preference_profiles')
         .select('id, name, dietary_type, is_default, created_at')
-        .eq('user_id', targetUserId);
+        .eq('user_id', targetUserId)
+        .is('deleted_at', null);
 
     // Get admin audit log entries for this user
     const { data: auditLog } = await supabase
@@ -378,10 +505,13 @@ async function getUserDetails(supabase: any, targetUserId: string) {
         .from('blocked_users')
         .select('*')
         .eq('user_id', targetUserId)
-        .single();
+        .maybeSingle();
 
     return {
-        user: userInfo,
+        user: {
+            ...userInfo,
+            email: normalizeEmail(userInfo.email),
+        },
         subscription,
         credits,
         recentUsage: usage || [],
@@ -399,7 +529,7 @@ async function getUserDetails(supabase: any, targetUserId: string) {
 
 async function resetAccount(supabase: any, adminId: string, adminEmail: string, targetUserId: string) {
     // Delete meal plans
-    await supabase.from('meal_plans').delete().eq('user_id', targetUserId);
+    await supabase.from('weekly_plans').delete().eq('user_id', targetUserId);
 
     // Delete preferences (keep one default)
     await supabase.from('preference_profiles').delete().eq('user_id', targetUserId);
@@ -411,6 +541,7 @@ async function resetAccount(supabase: any, adminId: string, adminEmail: string, 
     await supabase.from('user_credits').insert({
         user_id: targetUserId,
         credit_type: 'trial',
+        credits: 25,
         meal_credits: 25,
         grocery_credits: 63,
         edit_credits: 25,
@@ -421,7 +552,7 @@ async function resetAccount(supabase: any, adminId: string, adminEmail: string, 
     // Reset subscription to free
     await supabase
         .from('user_subscriptions')
-        .update({ plan_id: 'free', status: 'active', trial_ends_at: trialEndsAt })
+        .update({ plan_id: 'free', status: 'active', trial_ends_at: trialEndsAt, deleted_at: null })
         .eq('user_id', targetUserId);
 
     // Clear usage history
@@ -497,12 +628,14 @@ async function getAnalytics(supabase: any) {
     const { count: activeUsers } = await supabase
         .from('dim_users')
         .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null)
         .gte('last_active_at', sevenDaysAgo.toISOString());
 
     // Total users
     const { count: totalUsers } = await supabase
         .from('dim_users')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
 
     // Credits used (last 7 days)
     const { data: usageData } = await supabase
@@ -515,7 +648,8 @@ async function getAnalytics(supabase: any) {
     // Plan distribution
     const { data: planData } = await supabase
         .from('user_subscriptions')
-        .select('plan_id');
+        .select('plan_id')
+        .is('deleted_at', null);
 
     const planDistribution: Record<string, number> = {};
     planData?.forEach((row: any) => {
@@ -547,16 +681,29 @@ async function listTestAccounts(supabase: any) {
     const { data: accounts, error } = await supabase
         .from('test_accounts')
         .select('*')
-        .order('tier');
+        .order('email');
 
     if (error) throw error;
 
-    // Check if users exist in auth
-    const enrichedAccounts = await Promise.all((accounts || []).map(async (acc: any) => {
-        const { data: authUsers } = await supabase.auth.admin.listUsers();
-        const exists = authUsers?.users?.some((u: any) => u.email === acc.email);
-        return { ...acc, exists };
-    }));
+    const authUsers = await listAuthUsers(supabase);
+    const authEmailSet = new Set(
+        authUsers
+            .map((user: any) => normalizeEmail(user.email).toLowerCase())
+            .filter(Boolean)
+    );
+
+    const enrichedAccounts = (accounts || []).map((acc: any) => {
+        const normalizedEmail = normalizeEmail(acc.email).toLowerCase();
+        const exists = authEmailSet.has(normalizedEmail);
+        const usesGoogleBootstrap = acc.reset_mode === 'manual';
+
+        return {
+            ...acc,
+            exists,
+            usesGoogleBootstrap,
+            canCreate: !usesGoogleBootstrap && !exists,
+        };
+    });
 
     return { accounts: enrichedAccounts };
 }
@@ -607,6 +754,8 @@ async function createTestUser(supabase: any, email: string, tier: string) {
     };
 
     const config = tierConfigs[tier] || tierConfigs.free;
+    const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const creditType = config.plan_id === 'free' ? 'trial' : 'plan';
 
     // Create subscription
     await supabase.from('user_subscriptions').upsert({
@@ -614,18 +763,20 @@ async function createTestUser(supabase: any, email: string, tier: string) {
         plan_id: config.plan_id,
         status: 'active',
         billing_preference: config.byok_enabled ? 'byok' : 'credits',
-        trial_ends_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        trial_ends_at: expiresAt,
+        deleted_at: null
     });
 
     // Create credits
     await supabase.from('user_credits').insert({
         user_id: userId,
-        credit_type: 'test_account',
+        credit_type: creditType,
+        credits: config.meal_credits,
         meal_credits: config.meal_credits,
         grocery_credits: config.grocery_credits,
         edit_credits: config.edit_credits,
         regen_credits: config.regen_credits,
-        expires_at: null
+        expires_at: expiresAt
     });
 
     // Add to dim_users
@@ -633,55 +784,41 @@ async function createTestUser(supabase: any, email: string, tier: string) {
         user_id: userId,
         email,
         signup_date: new Date().toISOString().split('T')[0],
-        current_tier: tier
+        current_tier: tier,
+        deleted_at: null
     });
 
     return { success: true, userId, message: `Test user created for ${tier} tier` };
 }
 
-async function resetTestUser(supabase: any, email: string, tier: string) {
-    // Find user by email
-    const { data: authUsers } = await supabase.auth.admin.listUsers();
-    const user = authUsers?.users?.find((u: any) => u.email === email);
+async function resetTestUser(supabase: any, adminId: string, adminEmail: string, email: string, _tier: string) {
+    const normalizedEmail = normalizeEmail(email);
+    const { data, error } = await supabase.rpc('admin_reset_test_account', {
+        p_email: normalizedEmail,
+    });
 
-    if (!user) {
-        return { success: false, message: 'User not found' };
+    if (error) {
+        throw error;
     }
 
-    const userId = user.id;
+    const targetUserId = data?.target_user_id || null;
+    await supabase.from('admin_audit_log').insert({
+        admin_user_id: adminId,
+        action_type: 'reset_test_account',
+        target_user_id: targetUserId,
+        details: {
+            admin_email: adminEmail,
+            target_email: normalizedEmail,
+            reset_at: data?.reset_at ?? null,
+            counts: data?.counts ?? {},
+        }
+    });
 
-    // Clear all user data
-    await supabase.from('meal_plans').delete().eq('user_id', userId);
-    await supabase.from('preference_profiles').delete().eq('user_id', userId);
-    await supabase.from('user_credits').delete().eq('user_id', userId);
-    await supabase.from('usage_tracking').delete().eq('user_id', userId);
-
-    // Re-apply tier config
-    const tierConfigs: Record<string, any> = {
-        free: { plan_id: 'free', meal_credits: 25, grocery_credits: 63, edit_credits: 25, regen_credits: 25 },
-        basic: { plan_id: 'basic', meal_credits: 100, grocery_credits: 250, edit_credits: 100, regen_credits: 100 },
-        pro: { plan_id: 'pro', meal_credits: 999, grocery_credits: 999, edit_credits: 999, regen_credits: 999 }
+    return {
+        success: true,
+        message: `Test account ${normalizedEmail} reset to fresh onboarding state`,
+        ...(data || {}),
     };
-
-    const config = tierConfigs[tier] || tierConfigs.free;
-
-    await supabase.from('user_subscriptions').upsert({
-        user_id: userId,
-        plan_id: config.plan_id,
-        status: 'active'
-    });
-
-    await supabase.from('user_credits').insert({
-        user_id: userId,
-        credit_type: 'test_account',
-        meal_credits: config.meal_credits,
-        grocery_credits: config.grocery_credits,
-        edit_credits: config.edit_credits,
-        regen_credits: config.regen_credits,
-        expires_at: null
-    });
-
-    return { success: true, message: `Test user ${email} reset to ${tier} tier` };
 }
 
 // =====================================================
@@ -745,18 +882,21 @@ async function getDetailedAnalytics(supabase: any) {
     // Total users
     const { count: totalUsers } = await supabase
         .from('dim_users')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
 
     // Active users (7d and 30d)
     const { count: activeUsers7d } = await supabase
-        .from('usage_tracking')
-        .select('user_id', { count: 'exact', head: true })
-        .gte('created_at', sevenDaysAgo.toISOString());
+        .from('dim_users')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .gte('last_active_at', sevenDaysAgo.toISOString());
 
     const { count: activeUsers30d } = await supabase
-        .from('usage_tracking')
-        .select('user_id', { count: 'exact', head: true })
-        .gte('created_at', thirtyDaysAgo.toISOString());
+        .from('dim_users')
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null)
+        .gte('last_active_at', thirtyDaysAgo.toISOString());
 
     // Generations by type
     const { data: usageByType } = await supabase
@@ -789,7 +929,8 @@ async function getDetailedAnalytics(supabase: any) {
     // Plan distribution
     const { data: planData } = await supabase
         .from('user_subscriptions')
-        .select('plan_id');
+        .select('plan_id')
+        .is('deleted_at', null);
 
     const planDistribution: Record<string, number> = {};
     planData?.forEach((row: any) => {
@@ -807,11 +948,12 @@ async function getDetailedAnalytics(supabase: any) {
     // Preference profiles count
     const { count: totalProfiles } = await supabase
         .from('preference_profiles')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .is('deleted_at', null);
 
     // Meal plans count
     const { count: totalMealPlans } = await supabase
-        .from('meal_plans')
+        .from('weekly_plans')
         .select('*', { count: 'exact', head: true });
 
     return {
@@ -841,6 +983,7 @@ async function getUserActivityTimeline(supabase: any, targetUserId: string) {
         .from('preference_profiles')
         .select('id, name, dietary_type, dislikes, breakfast_preferences, lunch_preferences, dinner_preferences, is_default, created_at')
         .eq('user_id', targetUserId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
     // Get meal history (ratings)
@@ -853,8 +996,8 @@ async function getUserActivityTimeline(supabase: any, targetUserId: string) {
 
     // Get saved meal plans
     const { data: mealPlans } = await supabase
-        .from('meal_plans')
-        .select('id, profile_id, week_range, created_at')
+        .from('weekly_plans')
+        .select('id, profile_id, week_range:week_start_date, created_at')
         .eq('user_id', targetUserId)
         .order('created_at', { ascending: false })
         .limit(20);
@@ -872,7 +1015,7 @@ async function getUserActivityTimeline(supabase: any, targetUserId: string) {
         .from('fact_credit_transactions')
         .select('*')
         .eq('user_id', targetUserId)
-        .order('txn_ts', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(20);
 
     // Build activity timeline
@@ -936,7 +1079,8 @@ async function getAggregateInsights(supabase: any) {
     // Most common dietary types
     const { data: dietaryData } = await supabase
         .from('preference_profiles')
-        .select('dietary_type');
+        .select('dietary_type')
+        .is('deleted_at', null);
 
     const dietaryTypes: Record<string, number> = {};
     dietaryData?.forEach((p: any) => {
@@ -948,7 +1092,8 @@ async function getAggregateInsights(supabase: any) {
     // Most common dislikes
     const { data: dislikesData } = await supabase
         .from('preference_profiles')
-        .select('dislikes');
+        .select('dislikes')
+        .is('deleted_at', null);
 
     const dislikesCount: Record<string, number> = {};
     dislikesData?.forEach((p: any) => {
@@ -1020,41 +1165,26 @@ async function getAggregateInsights(supabase: any) {
 
 async function deleteUser(supabase: any, adminId: string, adminEmail: string, targetUserId: string) {
     try {
-        // Log the action first (use correct column names)
-        await supabase.from('admin_audit_log').insert({
-            admin_id: adminId,
-            admin_email: adminEmail,
-            action: 'delete_user',
-            target_user_id: targetUserId,
-            details: { reason: 'Admin deleted user' }
+        const { data: archiveResult, error: archiveError } = await supabase.rpc('soft_delete_user', {
+            p_user_id: targetUserId,
+            p_reason: `Admin deleted user (${adminEmail})`
         });
 
-        // Delete user data in order (respecting foreign keys)
-        // Wrap each in try-catch to continue even if some tables don't exist
-        const tablesToDelete = [
-            { table: 'scheduled_meals', column: 'user_id' },
-            { table: 'meal_history', column: 'user_id' },
-            { table: 'meal_plans', column: 'user_id' },
-            { table: 'preference_profiles', column: 'user_id' },
-            { table: 'usage_tracking', column: 'user_id' },
-            { table: 'user_credits', column: 'user_id' },
-            { table: 'user_subscriptions', column: 'user_id' },
-            { table: 'fact_credit_transactions', column: 'user_id' },
-            { table: 'weekly_bonus_log', column: 'user_id' },
-            { table: 'dim_users', column: 'user_id' },
-            { table: 'user_profiles', column: 'id' },
-            { table: 'blocked_users', column: 'user_id' },
-        ];
-
-        for (const { table, column } of tablesToDelete) {
-            try {
-                await supabase.from(table).delete().eq(column, targetUserId);
-            } catch (e) {
-                console.log(`Table ${table} delete skipped:`, e);
-            }
+        if (archiveError) {
+            throw archiveError;
         }
 
-        // Delete auth user
+        if (archiveResult?.success === false) {
+            throw new Error(archiveResult.error || 'Failed to archive user');
+        }
+
+        await supabase.from('admin_audit_log').insert({
+            admin_user_id: adminId,
+            action_type: 'delete_user',
+            target_user_id: targetUserId,
+            details: { reason: 'Admin deleted user', admin_email: adminEmail }
+        });
+
         const { error } = await supabase.auth.admin.deleteUser(targetUserId);
         if (error) {
             console.error('Auth delete error:', error);
@@ -1099,9 +1229,21 @@ async function getAdminHistory(supabase: any) {
     const { data: users } = await supabase
         .from('dim_users')
         .select('user_id, email')
+        .is('deleted_at', null)
         .in('user_id', targetIds);
 
-    const userMap = new Map(users?.map((u: any) => [u.user_id, u.email]) || []);
+    const { data: deletedUsers } = await supabase
+        .from('deleted_users')
+        .select('id, email')
+        .in('id', targetIds);
+
+    const userMap = new Map<string, string>();
+    users?.forEach((u: any) => userMap.set(u.user_id, normalizeEmail(u.email)));
+    deletedUsers?.forEach((u: any) => {
+        if (!userMap.has(u.id)) {
+            userMap.set(u.id, normalizeEmail(u.email));
+        }
+    });
 
     return {
         history: data?.map((h: any) => ({
@@ -1117,6 +1259,7 @@ async function getUserPreferences(supabase: any, targetUserId: string) {
         .from('preference_profiles')
         .select('*')
         .eq('user_id', targetUserId)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -1139,6 +1282,7 @@ async function getAllUserProfiles(supabase: any) {
             is_default,
             created_at
         `)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -1148,9 +1292,10 @@ async function getAllUserProfiles(supabase: any) {
     const { data: users } = await supabase
         .from('dim_users')
         .select('user_id, email')
+        .is('deleted_at', null)
         .in('user_id', userIds);
 
-    const userMap = new Map(users?.map((u: any) => [u.user_id, u.email]) || []);
+    const userMap = new Map(users?.map((u: any) => [u.user_id, normalizeEmail(u.email)]) || []);
 
     // Group by unique dietary configurations
     const uniqueConfigs: Record<string, any> = {};
@@ -1200,6 +1345,7 @@ async function changeTier(supabase: any, adminId: string, adminEmail: string, ta
             user_id: targetUserId,
             plan_id: newTier,
             status: 'active',
+            deleted_at: null,
             updated_at: new Date().toISOString()
         }, { onConflict: 'user_id' });
 
@@ -1209,11 +1355,10 @@ async function changeTier(supabase: any, adminId: string, adminEmail: string, ta
     await supabase
         .from('admin_audit_log')
         .insert({
-            admin_id: adminId,
-            admin_email: adminEmail,
-            action: 'change_tier',
+            admin_user_id: adminId,
+            action_type: 'change_tier',
             target_user_id: targetUserId,
-            details: { new_tier: newTier, reason: 'Admin override' }
+            details: { new_tier: newTier, reason: 'Admin override', admin_email: adminEmail }
         });
 
     return { success: true, message: `User tier changed to ${newTier}` };
@@ -1225,7 +1370,8 @@ async function cancelRazorpaySubscription(supabase: any, adminId: string, adminE
         .from('user_subscriptions')
         .select('razorpay_subscription_id, plan_id')
         .eq('user_id', targetUserId)
-        .single();
+        .is('deleted_at', null)
+        .maybeSingle();
 
     if (subError) throw subError;
     if (!subscription?.razorpay_subscription_id) {
@@ -1273,13 +1419,13 @@ async function cancelRazorpaySubscription(supabase: any, adminId: string, adminE
         await supabase
             .from('admin_audit_log')
             .insert({
-                admin_id: adminId,
-                admin_email: adminEmail,
-                action: 'cancel_razorpay',
+                admin_user_id: adminId,
+                action_type: 'cancel_razorpay',
                 target_user_id: targetUserId,
                 details: {
                     subscription_id: subscription.razorpay_subscription_id,
-                    previous_plan: subscription.plan_id
+                    previous_plan: subscription.plan_id,
+                    admin_email: adminEmail
                 }
             });
 
@@ -1306,6 +1452,11 @@ async function modifyCredits(
     }
 ) {
     const { targetUserId, creditType, operation, amount, sourceType = 'admin', expiresAt, reason = 'Admin modification' } = payload;
+    const normalizedAmount = Number(amount);
+
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+        throw new Error('Credit amount must be greater than zero');
+    }
 
     // Map credit type to column name
     const creditColumnMap: Record<string, string> = {
@@ -1318,85 +1469,57 @@ async function modifyCredits(
 
     if (operation === 'add') {
         // Insert a new credit row with custom expiry and source type
-        const expiryDate = expiresAt
-            ? new Date(expiresAt).toISOString()
-            : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // Default: 30 days
+        const storedCreditType = normalizeStoredCreditType(sourceType);
+        const expiryDate = resolveCreditExpiry(sourceType, expiresAt);
 
         const { error: insertError } = await supabase
             .from('user_credits')
             .insert({
                 user_id: targetUserId,
-                credit_type: sourceType,
-                [creditColumn]: amount,
-                meal_credits: creditType === 'meal' ? amount : 0,
-                grocery_credits: creditType === 'grocery' ? amount : 0,
-                edit_credits: creditType === 'edit' ? amount : 0,
-                regen_credits: creditType === 'regen' ? amount : 0,
+                credit_type: storedCreditType,
+                ...buildCreditBalancePatch(creditType, normalizedAmount),
                 expires_at: expiryDate,
             });
 
         if (insertError) throw insertError;
-
-        // Also add proportional backend credits (6.25x ratio) for meal credits
-        if (creditType === 'meal') {
-            const backendCreditsToAdd = amount * 6.25;
-
-            // Ensure backend_credits record exists
-            await supabase
-                .from('backend_credits')
-                .upsert({
-                    user_id: targetUserId,
-                    credits_limit: 25.0,
-                    credits_used: 0,
-                    cycle_start: new Date().toISOString().split('T')[0],
-                    cycle_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    warning_level: 'none',
-                    restricted_mode: false
-                }, { onConflict: 'user_id', ignoreDuplicates: true });
-
-            // Add to existing limit
-            await supabase
-                .from('backend_credits')
-                .update({
-                    credits_limit: supabase.raw(`credits_limit + ${backendCreditsToAdd}`),
-                    updated_at: new Date().toISOString()
-                })
-                .eq('user_id', targetUserId);
-
-            // Alternative approach using RPC if raw doesn't work
-            await supabase.rpc('add_backend_credits', {
-                p_user_id: targetUserId,
-                p_amount: backendCreditsToAdd
-            }).catch(() => {
-                // Fallback: direct SQL through supabase
-                console.log('RPC failed, using direct update');
-            });
-        }
     } else {
         // Remove credits by finding existing rows and deducting
         const { data: creditRows, error: fetchError } = await supabase
             .from('user_credits')
             .select('*')
             .eq('user_id', targetUserId)
+            .is('deleted_at', null)
             .gt(creditColumn, 0)
-            .order('expires_at', { ascending: true }); // Remove from soonest expiring first
+            .order('expires_at', { ascending: true, nullsFirst: false })
+            .order('created_at', { ascending: true }); // Remove from soonest expiring first
 
         if (fetchError) throw fetchError;
 
-        let remaining = amount;
+        let remaining = normalizedAmount;
         for (const row of creditRows || []) {
             if (remaining <= 0) break;
             const available = row[creditColumn] || 0;
             const toDeduct = Math.min(available, remaining);
+            const updatePayload: Record<string, number> = {
+                [creditColumn]: available - toDeduct,
+            };
+
+            if (creditColumn === 'meal_credits') {
+                updatePayload.credits = Math.max(Number(row.credits ?? available) - toDeduct, 0);
+            }
 
             const { error: updateError } = await supabase
                 .from('user_credits')
-                .update({ [creditColumn]: available - toDeduct })
+                .update(updatePayload)
                 .eq('id', row.id);
 
             if (!updateError) {
                 remaining -= toDeduct;
             }
+        }
+
+        if (remaining > 0) {
+            throw new Error(`Insufficient ${creditType} credits to remove ${normalizedAmount}`);
         }
     }
 
@@ -1408,16 +1531,15 @@ async function modifyCredits(
         details: {
             credit_type: creditType,
             operation,
-            amount,
+            amount: normalizedAmount,
             source_type: sourceType,
             expires_at: expiresAt,
             reason,
-            admin_email: adminEmail,
-            backend_credits_added: operation === 'add' && creditType === 'meal' ? amount * 6.25 : 0
+            admin_email: adminEmail
         }
     });
 
-    return { success: true, message: `${amount} ${creditType} credits ${operation === 'add' ? 'added' : 'removed'}${operation === 'add' && creditType === 'meal' ? ` (+ ${amount * 6.25} backend credits)` : ''}` };
+    return { success: true, message: `${normalizedAmount} ${creditType} credits ${operation === 'add' ? 'added' : 'removed'}` };
 }
 
 // =====================================================
@@ -1678,4 +1800,3 @@ async function getPushTokenStats(supabase: any) {
         recentRegistrations: recentRegistrations || 0
     };
 }
-

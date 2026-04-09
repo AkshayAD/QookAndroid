@@ -1,62 +1,61 @@
 package in.qook.app;
 
-import android.graphics.Color;
-import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
 
-import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
 
+import java.util.Locale;
+
 public class MainActivity extends BridgeActivity {
-    
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(NativeGoogleAuthPlugin.class);
         super.onCreate(savedInstanceState);
-        
-        // Configure status bar AFTER Capacitor initializes to ensure our settings stick
-        configureStatusBar();
+
+        View rootView = getWindow().getDecorView();
+        ViewCompat.setOnApplyWindowInsetsListener(rootView, (view, windowInsets) -> {
+            publishWindowInsets(windowInsets);
+            return windowInsets;
+        });
+        rootView.post(this::publishCurrentWindowInsets);
     }
-    
+
     @Override
     public void onResume() {
         super.onResume();
-        // Re-apply on resume in case anything resets the flags
-        configureStatusBar();
+        publishCurrentWindowInsets();
     }
-    
-    /**
-     * Configure the status bar to show dark icons on a white background.
-     * This ensures visibility regardless of Capacitor plugin or theme settings.
-     */
-    private void configureStatusBar() {
-        Window window = getWindow();
-        if (window == null) return;
-        
-        // Set status bar color to white
-        window.setStatusBarColor(Color.WHITE);
-        
-        // Clear any translucent flags that might interfere
-        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS);
-        
-        // Add flag for drawing behind status bar but with proper insets
-        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
-        
-        // Ensure content does NOT extend behind status bar (app content starts below the bar)
-        WindowCompat.setDecorFitsSystemWindows(window, true);
-        
-        // Set light status bar (dark icons) - this is the key!
-        View decorView = window.getDecorView();
-        WindowInsetsControllerCompat insetsController = 
-            WindowCompat.getInsetsController(window, decorView);
-        
-        if (insetsController != null) {
-            // true = light status bar = DARK icons (confusing but correct)
-            insetsController.setAppearanceLightStatusBars(true);
+
+    private void publishCurrentWindowInsets() {
+        View rootView = getWindow().getDecorView();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(rootView);
+        if (insets != null) {
+            publishWindowInsets(insets);
         }
+    }
+
+    private void publishWindowInsets(WindowInsetsCompat windowInsets) {
+        if (bridge == null || bridge.getWebView() == null) {
+            return;
+        }
+
+        Insets systemBarInsets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+        int topInset = Math.max(systemBarInsets.top, 0);
+        int bottomInset = Math.max(systemBarInsets.bottom, 0);
+        String script = String.format(
+            Locale.US,
+            "(function(){var root=document.documentElement;if(!root){return;}root.style.setProperty('--native-safe-area-top','%dpx');root.style.setProperty('--native-safe-area-bottom','%dpx');window.dispatchEvent(new CustomEvent('qook-native-insets',{detail:{top:%d,bottom:%d}}));})();",
+            topInset,
+            bottomInset,
+            topInset,
+            bottomInset
+        );
+
+        bridge.getWebView().post(() -> bridge.getWebView().evaluateJavascript(script, null));
     }
 }

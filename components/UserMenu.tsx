@@ -1,19 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, ChevronDown, Settings, Utensils, MessageSquare, HelpCircle, Sparkles, Trash2, Gift, Copy, Check, Crown, Download } from 'lucide-react';
+import { User, LogOut, ChevronDown, Settings, Utensils, MessageSquare, HelpCircle, Sparkles, Trash2, Gift, Copy, Check, Crown } from 'lucide-react';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { getOrCreateReferralCode } from '../services/referralService';
 
 interface UserMenuProps {
     userEmail: string | null;
     userId?: string | null;
-    onSignOut: () => void;
+    onSignOut: () => Promise<void> | void;
     onOpenSettings?: () => void;
     onOpenPreferences?: () => void;
     onOpenFeedback?: () => void;
     onStartTour?: () => void;
     onOpenPricing?: () => void;
     onDeleteAccount?: () => void;
-    onInstallPWA?: () => void;
 }
 
 const UserMenu: React.FC<UserMenuProps> = ({
@@ -25,7 +24,6 @@ const UserMenu: React.FC<UserMenuProps> = ({
     onOpenFeedback,
     onStartTour,
     onOpenPricing,
-    onInstallPWA,
     onDeleteAccount
 }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -174,20 +172,6 @@ const UserMenu: React.FC<UserMenuProps> = ({
                             </button>
                         )}
 
-                        {/* Install Webapp */}
-                        {onInstallPWA && (
-                            <button
-                                onClick={() => {
-                                    setIsOpen(false);
-                                    onInstallPWA();
-                                }}
-                                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-indigo-600 hover:bg-indigo-50 transition-colors"
-                            >
-                                <Download className="w-4 h-4" />
-                                Install Webapp
-                            </button>
-                        )}
-
                         {/* Feedback */}
                         {onOpenFeedback && (
                             <button
@@ -254,9 +238,9 @@ ${link}`;
                     {/* Sign Out */}
                     <div className="py-1">
                         <button
-                            onClick={() => {
+                            onClick={async () => {
                                 setIsOpen(false);
-                                onSignOut();
+                                await onSignOut();
                             }}
                             className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                         >

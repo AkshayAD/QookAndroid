@@ -104,11 +104,14 @@ export function sanitizeDayPlan(day: DayPlan): DayPlan {
   };
 }
 
-export function sanitizeWeeklyPlan(plan?: WeeklyPlan | null): WeeklyPlan {
+export function sanitizeWeeklyPlan<T extends WeeklyPlan>(plan: T): T;
+export function sanitizeWeeklyPlan(plan?: WeeklyPlan | null): WeeklyPlan;
+export function sanitizeWeeklyPlan<T extends WeeklyPlan>(plan?: T | WeeklyPlan | null): T | WeeklyPlan {
   return {
+    ...(plan || {}),
     days: (plan?.days || []).map((day) => sanitizeDayPlan(day)),
     alternatives: sanitizeMealAlternatives(plan?.alternatives) || undefined,
-  };
+  } as T | WeeklyPlan;
 }
 
 export function sanitizeGroceryItems(items?: GroceryItem[] | null): GroceryItem[] {

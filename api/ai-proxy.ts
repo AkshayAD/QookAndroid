@@ -1,12 +1,13 @@
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from '@supabase/supabase-js';
 import {
     buildMealPlanPrompt as buildSharedMealPlanPrompt,
     buildSharedGenerationContext,
     getSeasonalContext,
     normalizeGeneratedAlternatives,
+    normalizeGeneratedAlternativesForRequestedMeals,
     normalizeGeneratedWeeklyPlan,
-} from './promptContext';
+} from './promptContext.js';
 
 /**
  * Server-side AI Proxy for QookCommander
@@ -384,7 +385,7 @@ async function executeGeneratePlan(ai: GoogleGenAI, payload: any, isPro: boolean
 }
 
 async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boolean = false) {
-    const { currentMeal, mealType, preferences, dayName, existingMeals = [] } = payload;
+    const { currentMeal, mealType, preferences, dayName, existingMeals = [], learningSummary } = payload;
     const { season, availableVegetables } = getSeasonalContext();
 
     // Pro users get the better model
@@ -406,7 +407,7 @@ async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boole
         - Include accompaniments like "with roti", "served with raita"
         `;
 
-    const context = buildSharedGenerationContext(preferences);
+    const context = buildSharedGenerationContext(preferences, learningSummary);
     if (!context.mealsToPrepare.includes(mealType)) {
         return { meal: '' };
     }
@@ -422,6 +423,7 @@ async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boole
     Portion preference: ${context.portionSize}
     Pantry staples: ${context.pantryStaples.join(', ') || 'None'}
     Active inventory: ${context.activeInventoryItems.join(', ') || 'None'}
+    ${context.mealMemoryText}
     ${context.hasTiffin ? `Tiffin days: ${context.tiffinDays.join(', ')} for ${context.tiffinFor.join(', ') || 'office/school'}` : 'No tiffin requirement'}
     
     Current Season: ${season}
@@ -442,14 +444,13 @@ async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boole
     
     Output ONLY the name/description of the new meal as a plain string. Match the format of the original.`;
 
-    // Use fast model with minimal thinking for fast single meal regeneration
+    // Keep regen broadly compatible across Gemini variants by not forcing a model-specific thinking level.
     const response = await ai.models.generateContent({
         model,
         contents: prompt,
         config: {
             temperature: 0.9,  // Higher temperature for variety
             maxOutputTokens: 1000,  // Enough for detailed meal description
-            thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL }  // Minimal thinking for speed
         }
     });
 
@@ -457,7 +458,7 @@ async function executeRegenerateMeal(ai: GoogleGenAI, payload: any, isPro: boole
 }
 
 async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
-    const { currentMeals, instruction, mealTypes, preferences } = payload;
+    const { currentMeals, instruction, mealTypes, preferences, learningSummary } = payload;
 
     // Get seasonal context for relevant suggestions
     const { season, availableVegetables } = getSeasonalContext();
@@ -500,7 +501,7 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
         }
     };
 
-    const context = buildSharedGenerationContext(preferences);
+    const context = buildSharedGenerationContext(preferences, learningSummary);
     const selectedMealTypes = new Set(context.mealsToPrepare);
     const filteredMealTypes = mealTypes
         .map((mealType: string) => mealType.toLowerCase())
@@ -538,6 +539,7 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
     - Special Instructions: ${context.specialInstructions || 'None'}
     - Pantry staples already at home: ${context.pantryStaples.join(', ') || 'None'}
     - Active inventory already at home: ${context.activeInventoryItems.join(', ') || 'None'}
+    ${context.mealMemoryText}
     ${context.hasTiffin ? `- Tiffin requirements: ${context.tiffinDays.join(', ')} for ${context.tiffinFor.join(', ') || 'office/school'}` : ''}
     
     ${languageInstruction}
@@ -575,9 +577,8 @@ async function executeSmartEdit(ai: GoogleGenAI, payload: any) {
         }
     });
 
-    // Wrap the response in options key for backward compatibility with frontend
     const rawResult = JSON.parse(response.text || '{}');
-    return { options: normalizeGeneratedAlternatives(rawResult, { mealsToPrepare: filteredMealTypes }) };
+    return { options: normalizeGeneratedAlternativesForRequestedMeals(rawResult, filteredMealTypes) };
 }
 
 async function executeGenerateGrocery(ai: GoogleGenAI, payload: any) {
@@ -764,6 +765,7 @@ async function executeGenerateAlternatives(ai: GoogleGenAI, payload: any, isPro:
 SPECIAL INSTRUCTIONS: ${context.specialInstructions || 'None'}
 PANTRY STAPLES: ${context.pantryStaples.join(', ') || 'None'}
 ACTIVE INVENTORY: ${context.activeInventoryItems.join(', ') || 'None'}
+${context.mealMemoryText}
 ${languageInstruction}
 
 DO NOT REPEAT these meals which are already in the plan:

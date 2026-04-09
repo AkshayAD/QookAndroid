@@ -81,14 +81,12 @@ export default function OnboardingModal({ onComplete, isMobile = false }: Onboar
 
     const handleComplete = () => {
         setIsExiting(true);
-        localStorage.setItem('qook_onboarding_completed', 'true');
         setTimeout(() => {
             onComplete();
         }, 300);
     };
 
     const handleSkip = () => {
-        localStorage.setItem('qook_onboarding_completed', 'true');
         onComplete();
     };
 
@@ -247,14 +245,4 @@ export default function OnboardingModal({ onComplete, isMobile = false }: Onboar
             </div>
         </div>
     );
-}
-
-// Helper to check if onboarding should show
-export function shouldShowOnboarding(): boolean {
-    return localStorage.getItem('qook_onboarding_completed') !== 'true';
-}
-
-// Helper to reset onboarding (for "Show Guide" in user menu)
-export function resetOnboarding(): void {
-    localStorage.removeItem('qook_onboarding_completed');
 }

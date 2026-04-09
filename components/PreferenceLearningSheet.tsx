@@ -13,6 +13,7 @@ interface PreferenceLearningSheetProps {
     onLater?: () => void;
     onOpenPreferences?: () => void;
     isApplying?: boolean;
+    applyError?: string | null;
 }
 
 function SuggestionGroup({ icon: Icon, title, items, color }: {
@@ -53,6 +54,7 @@ export default function PreferenceLearningSheet({
     onLater,
     onOpenPreferences,
     isApplying = false,
+    applyError = null,
 }: PreferenceLearningSheetProps) {
     if (!isOpen || !summary) {
         return null;
@@ -63,6 +65,7 @@ export default function PreferenceLearningSheet({
         || summary.lunchPreferences.length > 0
         || summary.dinnerPreferences.length > 0
         || summary.dislikes.length > 0;
+    const canApply = summary.signalIds.length > 0;
 
     return (
         <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -154,8 +157,13 @@ export default function PreferenceLearningSheet({
                 </div>
 
                 <div className="px-6 py-4 border-t bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="text-sm text-gray-500">
-                        {summary.signalIds.length} signal{summary.signalIds.length === 1 ? '' : 's'} are ready to review.
+                    <div className="space-y-1">
+                        <div className="text-sm text-gray-500">
+                            {summary.signalIds.length} signal{summary.signalIds.length === 1 ? '' : 's'} are ready to review.
+                        </div>
+                        {applyError && (
+                            <p className="text-sm font-medium text-red-600">{applyError}</p>
+                        )}
                     </div>
                     <div className="flex items-center gap-3">
                         {onLater && (
@@ -175,7 +183,7 @@ export default function PreferenceLearningSheet({
                         </button>
                         <button
                             onClick={() => void onApply()}
-                            disabled={isApplying || !hasSuggestions}
+                            disabled={isApplying || !canApply}
                             className="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors inline-flex items-center gap-2"
                         >
                             <Check className="w-4 h-4" />

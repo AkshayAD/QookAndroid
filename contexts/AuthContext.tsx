@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Session, User, AuthError } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { setupDeepLinkHandler, closeOAuthBrowser, isNative } from '../utils/platform';
+import { closeOAuthBrowser, setupDeepLinkHandler } from '../utils/platform';
+import { signOutFromNativeGoogle } from '../lib/nativeGoogleAuth';
 
 interface AuthContextType {
     session: Session | null;
@@ -54,26 +55,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
         // Setup deep link handler for native OAuth callbacks
-        const cleanupDeepLink = setupDeepLinkHandler(async (accessToken, refreshToken) => {
-            console.log('[Auth] Received OAuth tokens from deep link');
+        const cleanupDeepLink = setupDeepLinkHandler(async ({ accessToken, refreshToken, code }) => {
+            console.log('[Auth] Received OAuth callback from deep link');
             try {
-                // Set the session from the received tokens
-                const { data, error } = await supabase.auth.setSession({
-                    access_token: accessToken,
-                    refresh_token: refreshToken,
-                });
+                if (accessToken && refreshToken) {
+                    const { data, error } = await supabase.auth.setSession({
+                        access_token: accessToken,
+                        refresh_token: refreshToken,
+                    });
 
-                if (error) {
-                    console.error('[Auth] Error setting session:', error);
-                } else {
-                    console.log('[Auth] Session set successfully');
-                    setSession(data.session);
-                    setUser(data.session?.user ?? null);
-                    // Close the OAuth browser window
-                    await closeOAuthBrowser();
+                    if (error) {
+                        console.error('[Auth] Error setting session:', error);
+                    } else {
+                        console.log('[Auth] Session set successfully from tokens');
+                        setSession(data.session);
+                        setUser(data.session?.user ?? null);
+                    }
+                } else if (code) {
+                    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+                    if (error) {
+                        console.error('[Auth] Error exchanging OAuth code:', error);
+                    } else {
+                        console.log('[Auth] Session exchanged successfully from code');
+                        setSession(data.session);
+                        setUser(data.session?.user ?? null);
+                    }
                 }
+
+                await closeOAuthBrowser();
             } catch (err) {
-                console.error('[Auth] Exception setting session:', err);
+                console.error('[Auth] Exception handling OAuth callback:', err);
             }
         });
 
@@ -115,6 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (supabase) {
             await supabase.auth.signOut();
         }
+        await signOutFromNativeGoogle();
         setSession(null);
         setUser(null);
     };
