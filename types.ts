@@ -28,6 +28,19 @@ export interface WeeklyPlan {
   alternatives?: MealAlternatives | null;
 }
 
+export interface PersistedWeeklyPlan extends WeeklyPlan {
+  weekStartDate: string | null;
+}
+
+export type PlannerDateResolutionSource = 'schedule' | 'blank';
+
+export interface PlannerDateResolution {
+  dateKey: string;
+  day: DayPlan;
+  source: PlannerDateResolutionSource;
+  hasMeals: boolean;
+}
+
 export interface GroceryItem {
   category: string;
   item: string;
@@ -55,7 +68,7 @@ export interface UserPreferences {
   country?: string;
   householdSize?: number;
   portionSize?: 'light' | 'regular' | 'hearty';
-  nonVegFrequency?: 'daily' | '3-4x/week' | '1-2x/week' | 'weekends';
+  nonVegFrequency?: '' | 'daily' | '3-4x/week' | '1-2x/week' | 'weekends';
   hasTiffin?: boolean;
   tiffinDays?: string[];
   tiffinFor?: string[];

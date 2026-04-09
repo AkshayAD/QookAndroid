@@ -86,20 +86,32 @@ export interface Database {
                     user_id: string;
                     profile_id: string | null;
                     days: Json;
+                    week_start_date: string | null;
                     created_at: string;
                     is_current: boolean;
+                    family_group_id: string | null;
+                    was_family_plan: boolean | null;
+                    last_modified_by: string | null;
                 };
                 Insert: {
                     id?: string;
                     user_id: string;
                     profile_id?: string | null;
                     days: Json;
+                    week_start_date?: string | null;
                     created_at?: string;
                     is_current?: boolean;
+                    family_group_id?: string | null;
+                    was_family_plan?: boolean | null;
+                    last_modified_by?: string | null;
                 };
                 Update: {
                     days?: Json;
+                    week_start_date?: string | null;
                     is_current?: boolean;
+                    family_group_id?: string | null;
+                    was_family_plan?: boolean | null;
+                    last_modified_by?: string | null;
                 };
             };
             scheduled_meals: {
@@ -112,6 +124,9 @@ export interface Database {
                     dinner: string | null;
                     created_at: string;
                     updated_at: string;
+                    family_group_id: string | null;
+                    was_family_plan: boolean | null;
+                    last_modified_by: string | null;
                 };
                 Insert: {
                     id?: string;
@@ -122,12 +137,18 @@ export interface Database {
                     dinner?: string | null;
                     created_at?: string;
                     updated_at?: string;
+                    family_group_id?: string | null;
+                    was_family_plan?: boolean | null;
+                    last_modified_by?: string | null;
                 };
                 Update: {
                     breakfast?: string | null;
                     lunch?: string | null;
                     dinner?: string | null;
                     updated_at?: string;
+                    family_group_id?: string | null;
+                    was_family_plan?: boolean | null;
+                    last_modified_by?: string | null;
                 };
             };
             grocery_lists: {

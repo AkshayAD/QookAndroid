@@ -15,7 +15,7 @@ export async function getOrCreateReferralCode(userId: string): Promise<string | 
             .from('referral_codes')
             .select('code')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
         if (existing?.code) {
             return existing.code;
@@ -120,7 +120,7 @@ export async function applyReferral(
             .from('referrals')
             .select('id')
             .eq('referee_id', refereeId)
-            .single();
+            .maybeSingle();
 
         if (existingReferral) {
             return { success: false, error: 'Already referred by someone' };
@@ -132,7 +132,7 @@ export async function applyReferral(
             .from('user_settings')
             .select('onboarding_completed')
             .eq('user_id', refereeId)
-            .single();
+            .maybeSingle();
 
         if (userSettings?.onboarding_completed) {
             return { success: false, error: 'Referral codes can only be used during signup' };

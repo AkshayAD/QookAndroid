@@ -1,10 +1,11 @@
-import { sanitizeMealAlternatives, sanitizeWeeklyPlan } from '../lib/mealSanitizer';
+import { sanitizeMealAlternatives, sanitizeWeeklyPlan } from '../lib/mealSanitizer.js';
 import {
   buildMealSelectionInstruction,
   normalizeAlternativesForSelectedMeals,
+  normalizeSparseAlternativesForSelectedMeals,
   normalizeSelectedMeals,
   normalizeWeeklyPlanForSelectedMeals,
-} from '../lib/mealSelection';
+} from '../lib/mealSelection.js';
 
 const EMPTY_VALUE_PATTERN = /^(null|undefined|none|n\/a)$/i;
 
@@ -64,28 +65,99 @@ export function getSeasonalContext(): { season: string; month: string; available
   return { season, month, availableVegetables: vegetables };
 }
 
-function buildLearningContextText(learningSummary: any, softPositiveSignals: string[], softNegativeSignals: string[]): string {
-  let learningContext = '';
+function takePriorityItems(limit: number, ...lists: unknown[]): string[] {
+  const merged: string[] = [];
+  const seen = new Set<string>();
 
-  if (learningSummary?.totalMealCount > 0) {
-    learningContext = `
-LEARNED FROM HISTORY (${learningSummary.totalMealCount} meals):
-Breakfast patterns: ${sanitizeList(learningSummary.acceptedBreakfasts).slice(0, 8).join(', ') || 'N/A'}
-Lunch patterns: ${sanitizeList(learningSummary.acceptedLunches).slice(0, 8).join(', ') || 'N/A'}
-Dinner patterns: ${sanitizeList(learningSummary.acceptedDinners).slice(0, 8).join(', ') || 'N/A'}
-DO NOT REPEAT: ${sanitizeList(learningSummary.recentMeals).join(', ') || 'N/A'}
-`;
+  lists.forEach((list) => {
+    sanitizeList(list).forEach((value) => {
+      if (merged.length >= limit) {
+        return;
+      }
+
+      const key = value.toLowerCase();
+      if (seen.has(key)) {
+        return;
+      }
+
+      seen.add(key);
+      merged.push(value);
+    });
+  });
+
+  return merged;
+}
+
+export interface CompactMealMemory {
+  breakfastExamples: string[];
+  lunchExamples: string[];
+  dinnerExamples: string[];
+  positiveStyleTags: string[];
+  avoidTags: string[];
+  recentMeals: string[];
+  promptText: string;
+}
+
+export function buildCompactMealMemory(preferences: any, learningSummary?: any): CompactMealMemory {
+  const breakfastExamples = takePriorityItems(
+    3,
+    preferences?.breakfastPreferences,
+    learningSummary?.acceptedBreakfasts
+  );
+  const lunchExamples = takePriorityItems(
+    3,
+    preferences?.lunchPreferences,
+    learningSummary?.acceptedLunches
+  );
+  const dinnerExamples = takePriorityItems(
+    3,
+    preferences?.dinnerPreferences,
+    learningSummary?.acceptedDinners
+  );
+  const positiveStyleTags = takePriorityItems(3, learningSummary?.softPositiveSignals);
+  const avoidTags = takePriorityItems(6, preferences?.dislikes, learningSummary?.softNegativeSignals);
+  const recentMeals = takePriorityItems(9, learningSummary?.recentMeals);
+
+  const sections: string[] = [];
+  if (
+    breakfastExamples.length > 0
+    || lunchExamples.length > 0
+    || dinnerExamples.length > 0
+    || positiveStyleTags.length > 0
+    || avoidTags.length > 0
+  ) {
+    sections.push('COMPACT MEAL MEMORY:');
+    if (breakfastExamples.length > 0) {
+      sections.push(`- Breakfast examples to lean toward: ${breakfastExamples.join(', ')}`);
+    }
+    if (lunchExamples.length > 0) {
+      sections.push(`- Lunch examples to lean toward: ${lunchExamples.join(', ')}`);
+    }
+    if (dinnerExamples.length > 0) {
+      sections.push(`- Dinner examples to lean toward: ${dinnerExamples.join(', ')}`);
+    }
+    if (positiveStyleTags.length > 0) {
+      sections.push(`- Style cues to lean into: ${positiveStyleTags.join(', ')}`);
+    }
+    if (avoidTags.length > 0) {
+      sections.push(`- Hard avoids or reduce strongly: ${avoidTags.join(', ')}`);
+    }
   }
 
-  if (softPositiveSignals.length > 0 || softNegativeSignals.length > 0) {
-    learningContext += `
-SOFT SIGNALS FROM RECENT ACTIONS:
-Lean into: ${softPositiveSignals.slice(0, 8).join(', ') || 'None'}
-Reduce or avoid: ${softNegativeSignals.slice(0, 8).join(', ') || 'None'}
-`;
+  if (recentMeals.length > 0) {
+    sections.push('VARIETY GUARDRAIL:');
+    sections.push(`- Avoid repeating too soon: ${recentMeals.join(', ')}`);
   }
 
-  return learningContext;
+  return {
+    breakfastExamples,
+    lunchExamples,
+    dinnerExamples,
+    positiveStyleTags,
+    avoidTags,
+    recentMeals,
+    promptText: sections.length > 0 ? `\n${sections.join('\n')}\n` : '',
+  };
 }
 
 export function buildSharedGenerationContext(preferences: any, learningSummary?: any) {
@@ -100,6 +172,7 @@ export function buildSharedGenerationContext(preferences: any, learningSummary?:
   const tiffinDays = sanitizeList(preferences?.tiffinDays);
   const tiffinFor = sanitizeList(preferences?.tiffinFor);
   const nonVegPreferences = sanitizeList(preferences?.nonVegPreferences);
+  const compactMealMemory = buildCompactMealMemory(preferences, learningSummary);
 
   return {
     country: sanitizeText(preferences?.country) || 'India',
@@ -128,7 +201,8 @@ export function buildSharedGenerationContext(preferences: any, learningSummary?:
     showPrepReminders: preferences?.showPrepReminders !== false,
     showQuantities: preferences?.showQuantities !== false,
     learningSummary,
-    learningContextText: buildLearningContextText(learningSummary, softPositiveSignals, softNegativeSignals),
+    compactMealMemory,
+    mealMemoryText: compactMealMemory.promptText,
     kitchenContextText: `
 KITCHEN MEMORY:
 - Pantry staples always on hand: ${pantryStaples.join(', ') || 'None'}
@@ -291,7 +365,7 @@ ${buildTiffinInstructions(context)}
 ${buildNonVegInstructions(context)}
 ${buildLanguageInstruction(context.language, context.householdSize)}
 ${buildMealSelectionInstruction(context.mealsToPrepare)}
-${context.learningContextText}
+${context.mealMemoryText}
 ${context.kitchenContextText}
 ${buildPrepAheadInstructions(context.showPrepReminders)}
 
@@ -349,4 +423,17 @@ export function normalizeGeneratedAlternatives(alternatives: any, preferences: a
   };
 
   return normalizeAlternativesForSelectedMeals(sanitizedAlternatives, preferences?.mealsToPrepare);
+}
+
+export function normalizeGeneratedAlternativesForRequestedMeals(
+  alternatives: any,
+  mealTypes?: Array<string | null | undefined>
+) {
+  const sanitizedAlternatives = sanitizeMealAlternatives(alternatives) || {
+    breakfast: [],
+    lunch: [],
+    dinner: [],
+  };
+
+  return normalizeSparseAlternativesForSelectedMeals(sanitizedAlternatives, mealTypes);
 }

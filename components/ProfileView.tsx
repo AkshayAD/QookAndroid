@@ -6,7 +6,7 @@ import { getOrCreateReferralCode } from '../services/referralService';
 interface ProfileViewProps {
     userEmail: string | null;
     userId?: string | null;
-    onSignOut: () => void;
+    onSignOut: () => Promise<void> | void;
     onOpenSettings?: () => void;
     onOpenPreferences?: () => void;
     onOpenFeedback?: () => void;
@@ -73,7 +73,7 @@ export default function ProfileView({
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50 pb-24">
+        <div className="flex flex-col h-full bg-gray-50 pb-6">
             {/* Header Profile Card */}
             <div className="bg-white p-6 pb-8 border-b border-gray-100 flex flex-col items-center">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center mb-4 shadow-sm">
@@ -156,7 +156,9 @@ export default function ProfileView({
 
                 {/* Sign Out */}
                 <button
-                    onClick={onSignOut}
+                    onClick={async () => {
+                        await onSignOut();
+                    }}
                     className="w-full bg-white rounded-2xl p-4 flex items-center justify-center gap-2 text-red-600 font-medium border border-gray-200 shadow-sm active:bg-red-50 transition-colors"
                 >
                     <LogOut className="w-5 h-5" />

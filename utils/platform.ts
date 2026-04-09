@@ -11,6 +11,36 @@ export const isAndroid = (): boolean => Capacitor.getPlatform() === 'android';
 export const isNative = (): boolean => Capacitor.isNativePlatform();
 export const isWeb = (): boolean => Capacitor.getPlatform() === 'web';
 
+export const cleanupLegacyWebViewState = async (): Promise<void> => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const shouldCleanupCaches = isNative()
+        || window.location.protocol === 'capacitor:'
+        || window.location.hostname === 'localhost';
+
+    if (!shouldCleanupCaches) {
+        return;
+    }
+
+    try {
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+        }
+
+        if ('caches' in window) {
+            const cacheKeys = await caches.keys();
+            await Promise.all(cacheKeys.map((cacheKey) => caches.delete(cacheKey)));
+        }
+
+        console.log('[Platform] Cleared legacy service workers and caches');
+    } catch (error) {
+        console.warn('[Platform] Failed to clear legacy service workers and caches', error);
+    }
+};
+
 // Production backend URL for API calls
 // CRITICAL: Must use www.qook.in (not qook.in) to avoid 307 redirect which breaks CORS preflight
 const PRODUCTION_API_URL = 'https://www.qook.in';
@@ -34,8 +64,33 @@ export const getOAuthRedirectUrl = (): string => {
         // This URL scheme is registered in AndroidManifest.xml
         return 'in.qook.app://auth/callback';
     }
-    // For web, use the current origin
-    return window.location.origin + '/auth/callback';
+    return window.location.origin + '/dashboard';
+};
+
+export const openHostedAuthBrowser = async (
+    url: string,
+    onBrowserFinished?: () => void
+): Promise<void> => {
+    if (!isNative()) {
+        window.location.href = url;
+        return;
+    }
+
+    const finishedListener = await Browser.addListener('browserFinished', async () => {
+        finishedListener.remove();
+        onBrowserFinished?.();
+    });
+
+    try {
+        await Browser.open({
+            url,
+            presentationStyle: 'popover',
+            toolbarColor: '#f97316',
+        });
+    } catch (error) {
+        finishedListener.remove();
+        throw error;
+    }
 };
 
 // Initialize Android-specific features
@@ -43,8 +98,8 @@ export const initAndroidApp = async (): Promise<void> => {
     if (!isAndroid()) return;
 
     try {
-        // Status bar is configured natively in MainActivity.java for reliability
-        // These JS calls are backup/redundant but won't hurt
+        // Status bar defaults come from Capacitor config.
+        // These runtime calls re-assert the same values on Android resume.
         try {
             await StatusBar.setStyle({ style: Style.Light }); // Light = dark icons
             await StatusBar.setBackgroundColor({ color: '#ffffff' });
@@ -80,50 +135,10 @@ export const initAndroidApp = async (): Promise<void> => {
     }
 };
 
-// Open OAuth in in-app browser with redirect detection
-export const openOAuthInAppBrowser = async (
-    url: string,
-    onAuthCallback: (accessToken: string, refreshToken: string) => void
-): Promise<void> => {
-    if (!isNative()) {
-        // Web: just redirect
-        window.location.href = url;
-        return;
-    }
-
-    // Listen for browser URL changes to detect OAuth callback
-    const urlChangeListener = await Browser.addListener('browserPageLoaded', async () => {
-        // This fires when page loads, but we can't get the URL directly
-        // Instead, we'll rely on the browserFinished event
-    });
-
-    const finishedListener = await Browser.addListener('browserFinished', async () => {
-        // Browser was closed - cleanup
-        urlChangeListener.remove();
-        finishedListener.remove();
-    });
-
-    // Open in-app browser (not external)
-    await Browser.open({
-        url,
-        presentationStyle: 'popover',
-        toolbarColor: '#f97316'
-    });
-};
-
-// Open URL in external browser (for OAuth - legacy, kept for compatibility)
-export const openOAuthBrowser = async (url: string): Promise<void> => {
-    if (isAndroid()) {
-        await Browser.open({ url, windowName: '_system' });
-    } else {
-        window.location.href = url;
-    }
-};
-
 // Handle deep link URL (OAuth callback)
 // Returns the parsed tokens if this is an auth callback
 export const setupDeepLinkHandler = (
-    onAuthCallback: (accessToken: string, refreshToken: string) => void
+    onAuthCallback: (payload: { accessToken?: string | null; refreshToken?: string | null; code?: string | null; url: string }) => void
 ): (() => void) => {
     if (!isNative()) return () => { };
 
@@ -133,6 +148,10 @@ export const setupDeepLinkHandler = (
     App.addListener('appUrlOpen', ({ url }) => {
         console.log('[Android] Deep link received:', url);
 
+        if (!url.startsWith('in.qook.app://auth/callback')) {
+            return;
+        }
+
         // Check if this is an auth callback
         if (url.includes('access_token') || url.includes('auth/callback')) {
             try {
@@ -140,6 +159,7 @@ export const setupDeepLinkHandler = (
                 const urlObj = new URL(url);
                 let accessToken: string | null = null;
                 let refreshToken: string | null = null;
+                let code: string | null = null;
 
                 // Try hash fragment first (Supabase implicit flow)
                 if (urlObj.hash) {
@@ -154,9 +174,16 @@ export const setupDeepLinkHandler = (
                     refreshToken = urlObj.searchParams.get('refresh_token');
                 }
 
-                if (accessToken && refreshToken) {
-                    console.log('[Android] OAuth tokens received');
-                    onAuthCallback(accessToken, refreshToken);
+                code = urlObj.searchParams.get('code');
+
+                if (accessToken || code || url.includes('auth/callback')) {
+                    console.log('[Android] OAuth callback received');
+                    onAuthCallback({
+                        accessToken,
+                        refreshToken,
+                        code,
+                        url,
+                    });
                 }
             } catch (error) {
                 console.error('[Android] Error parsing auth callback:', error);

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Key, Save, Crown, Sparkles, CreditCard, Zap, Trash2, AlertTriangle, Users, User, Phone, MapPin, Settings, Gift, CreditCard as CardIcon, LogOut, HelpCircle, ExternalLink, ChevronRight, Download, Bell, BellOff } from 'lucide-react';
+import { X, Key, Save, Crown, Sparkles, CreditCard, Zap, Trash2, AlertTriangle, Users, User, Phone, MapPin, Settings, Gift, CreditCard as CardIcon, LogOut, HelpCircle, ExternalLink, ChevronRight, Bell, BellOff } from 'lucide-react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
 import { useAuth } from '../contexts/AuthContext';
-import { updateBillingPreference, getBillingPreference } from '../services/subscriptionService';
+import { updateBillingPreference, getBillingPreference, cancelSubscriptionAPI } from '../services/subscriptionService';
 import { getUserProfile, saveUserProfile } from '../services/supabaseService';
 import ReferralShareCard from './ReferralShareCard';
 import FamilyModeSettings from './FamilyModeSettings';
@@ -14,7 +14,6 @@ interface SettingsModalProps {
     onClose: () => void;
     canClose: boolean;
     onDeleteAccount?: () => void;
-    onInstallPWA?: () => void;
     notificationSettings?: NotificationSettings;
     onSaveNotificationSettings?: (settings: NotificationSettings) => Promise<NotificationSettings>;
 }
@@ -25,7 +24,6 @@ export default function SettingsModal({
     onClose,
     canClose,
     onDeleteAccount,
-    onInstallPWA,
     notificationSettings: externalNotificationSettings,
     onSaveNotificationSettings,
 }: SettingsModalProps) {
@@ -434,7 +432,6 @@ export default function SettingsModal({
                                     <button
                                         onClick={async () => {
                                             if (!confirm('Are you sure you want to cancel your subscription?')) return;
-                                            const { cancelSubscriptionAPI } = await import('../services/subscriptionService');
                                             setSavingPref(true);
                                             try {
                                                 const result = await cancelSubscriptionAPI(user!.id);
@@ -623,20 +620,6 @@ export default function SettingsModal({
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Install Webapp */}
-                            {onInstallPWA && (
-                                <button
-                                    onClick={() => {
-                                        onClose();
-                                        onInstallPWA();
-                                    }}
-                                    className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-indigo-100 text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-200 transition-colors"
-                                >
-                                    <Download className="w-4 h-4" />
-                                    Install Webapp
-                                </button>
-                            )}
 
                             {/* Sign Out */}
                             <button

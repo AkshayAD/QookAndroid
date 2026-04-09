@@ -69,6 +69,15 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
         loadHouseholdSettings();
     }, [userId]);
 
+    useEffect(() => {
+        if (!currentProfile) {
+            return;
+        }
+
+        setLocalPrefs(currentProfile);
+        setProfileName(currentProfile.name);
+    }, [currentProfile]);
+
     // Handler to save household settings
     const handleSaveHouseholdSettings = async () => {
         if (!householdSettings) return;
@@ -529,7 +538,7 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                         {onRerunOnboarding && (
                             <div className="mt-4 pt-4 border-t border-gray-200">
                                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Setup Wizard</h3>
-                                <p className="text-[10px] text-gray-500 mb-3 leading-tight">Re-run the guided setup to update preferences easily.</p>
+                                <p className="text-[10px] text-gray-500 mb-3 leading-tight">Re-run setup to review or update your preferences.</p>
                                 <button
                                     onClick={() => {
                                         onClose();
@@ -538,7 +547,7 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                     className="w-full py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg text-xs font-bold hover:shadow-md flex items-center justify-center gap-2 transition-all"
                                 >
                                     <RotateCcw className="w-3 h-3" />
-                                    Re-run Setup Wizard
+                                    Re-run Setup
                                 </button>
                             </div>
                         )}

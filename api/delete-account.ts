@@ -39,7 +39,7 @@ export default async function handler(req: any, res: any) {
         return res.status(500).json({ error: 'Server configuration error' });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase: any = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
         // First, cancel any active Razorpay subscription

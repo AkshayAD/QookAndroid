@@ -1,14 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, Mail, Loader2, ChefHat, ShoppingCart, RefreshCw, Home, CreditCard, LogOut, User, Sparkles, Shield, Settings, Users } from 'lucide-react';
+import { Menu, X, Mail, ChefHat, ShoppingCart, RefreshCw, Home, CreditCard, LogOut, User, Sparkles, Shield, Settings, Users } from 'lucide-react';
 import { useIsAdmin } from './AdminRoute';
-import SettingsModal from './SettingsModal';
 import FamilyModeModal from './FamilyModeModal';
 import FamilyModeToggle from './FamilyModeToggle';
-import { supabase } from '../lib/supabase';
+import GoogleSignInButton from './GoogleSignInButton';
 import { useAuth } from '../contexts/AuthContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
-import { getOAuthRedirectUrl, isNative } from '../utils/platform';
+
+const SettingsModal = lazy(() => import('./SettingsModal'));
+
+function OverlayLoader() {
+    return (
+        <div className="fixed inset-0 z-[90] bg-black/20 backdrop-blur-[1px] flex items-center justify-center">
+            <div className="rounded-2xl bg-white/95 px-5 py-4 shadow-xl flex items-center gap-3">
+                <RefreshCw className="w-5 h-5 text-orange-500 animate-spin" />
+                <span className="text-sm font-medium text-gray-700">Loading...</span>
+            </div>
+        </div>
+    );
+}
 
 interface AppShellProps {
     children: React.ReactNode;
@@ -16,7 +27,7 @@ interface AppShellProps {
 }
 
 export default function AppShell({ children, mode = 'public' }: AppShellProps) {
-    const { user, loading: authLoading, signOut } = useAuth();
+    const { user, signOut } = useAuth();
     const { credits, subscription } = useSubscription();
     const { isAdmin } = useIsAdmin();
     const location = useLocation();
@@ -26,7 +37,6 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isFamilyModeOpen, setIsFamilyModeOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Listen for auth trigger from child components
@@ -41,22 +51,12 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
         setIsMobileMenuOpen(false);
     }, [location.pathname]);
 
-    const handleGoogleAuth = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const { error } = await supabase!.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    // Use platform-aware redirect
-                    redirectTo: isNative() ? getOAuthRedirectUrl() : window.location.origin + '/dashboard',
-                },
-            });
-            if (error) throw error;
-        } catch (err: any) {
-            setError(err.message || 'An error occurred');
-            setLoading(false);
-        }
+    const handleSignOut = async () => {
+        setIsMobileMenuOpen(false);
+        setIsAuthModalOpen(false);
+        setIsSettingsModalOpen(false);
+        setIsFamilyModeOpen(false);
+        await signOut();
     };
 
     const isActiveRoute = (path: string) => location.pathname === path;
@@ -243,7 +243,9 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
                                                 </Link>
                                             )}
                                             <button
-                                                onClick={() => signOut()}
+                                                onClick={async () => {
+                                                    await handleSignOut();
+                                                }}
                                                 className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
                                             >
                                                 <LogOut className="w-4 h-4" />
@@ -344,21 +346,13 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden">
                         <div className="p-8">
                             <div className="text-center mb-8">
-                                <h2 className="text-2xl font-bold text-gray-900">Welcome to QookCommander</h2>
-                                <p className="text-gray-500 text-sm mt-1">Sign in to continue</p>
+                                <h2 className="text-2xl font-bold text-gray-900">Welcome to Qook</h2>
+                                <p className="text-gray-500 text-sm mt-1">Sign in with Google to continue</p>
                             </div>
-                            <button
-                                onClick={handleGoogleAuth}
-                                disabled={loading}
-                                className="w-full py-4 px-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-3"
-                            >
-                                {loading ? (
-                                    <Loader2 className="w-5 h-5 animate-spin" />
-                                ) : (
-                                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
-                                )}
-                                {loading ? 'Signing In...' : 'Continue with Google'}
-                            </button>
+                            <GoogleSignInButton
+                                onError={(nextError) => setError(nextError)}
+                                showUnavailableMessage={true}
+                            />
                             {error && <div className="mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg">{error}</div>}
                         </div>
                     </div>
@@ -386,10 +380,12 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
 
             {/* Settings Modal */}
             {isSettingsModalOpen && (
-                <SettingsModal
-                    onClose={() => setIsSettingsModalOpen(false)}
-                    canClose={true}
-                />
+                <Suspense fallback={<OverlayLoader />}>
+                    <SettingsModal
+                        onClose={() => setIsSettingsModalOpen(false)}
+                        canClose={true}
+                    />
+                </Suspense>
             )}
 
             {/* Family Mode Modal */}

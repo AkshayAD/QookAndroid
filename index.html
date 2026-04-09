@@ -5,7 +5,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Qook - AI Meal Planner & Home Cook Assistant</title>
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <meta name="description"
     content="QookCommander is the ultimate AI home cook management app. Generate personalized weekly meal plans, smart grocery lists, and recipes in seconds. Save time and reduce food waste." />
   <meta name="keywords"
@@ -37,9 +36,7 @@
     content="Your personal meal planner. Get personalized weekly meal plans and organized grocery lists instantly." />
   <meta name="twitter:image" content="https://qook.in/og-preview.png" />
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="icon" type="image/png" href="/Site header logo.png" />
+  <link rel="icon" type="image/png" href="./Site header logo.png" />
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -56,88 +53,6 @@
     "screenshot": "https://qook.in/screenshot-planner.png"
   }
   </script>
-  <style>
-    body {
-      font-family: 'Inter', sans-serif;
-      background-color: #f8fafc;
-      /* Android/iOS: Push content below status bar */
-      padding-top: env(safe-area-inset-top, 0);
-      /* Native app feel: disable selection and tap highlight */
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    /* Allow selection in inputs */
-    input,
-    textarea,
-    [contenteditable] {
-      user-select: text;
-      -webkit-user-select: text;
-    }
-
-    /* iOS Safe Areas */
-    .safe-area-inset-bottom {
-      padding-bottom: env(safe-area-inset-bottom, 0);
-    }
-
-    .safe-area-inset-top {
-      padding-top: env(safe-area-inset-top, 0);
-    }
-
-    /* Dynamic viewport height for iOS */
-    .min-h-dvh {
-      min-height: 100dvh;
-      min-height: 100vh;
-    }
-
-    .h-dvh {
-      height: 100dvh;
-      height: 100vh;
-    }
-
-    /* Touch scrolling */
-    .touch-scroll {
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior: contain;
-    }
-
-    /* Prevent body scroll when modal open */
-    body.modal-open {
-      overflow: hidden;
-      position: fixed;
-      width: 100%;
-      height: 100%;
-    }
-
-    /* Ensure minimum touch target size */
-    .touch-target {
-      min-height: 44px;
-      min-width: 44px;
-    }
-
-    /* Markdown Styles */
-    .markdown-body ul {
-      list-style-type: disc;
-      padding-left: 1.5em;
-      margin-bottom: 1em;
-    }
-
-    .markdown-body ol {
-      list-style-type: decimal;
-      padding-left: 1.5em;
-      margin-bottom: 1em;
-    }
-
-    .markdown-body strong {
-      font-weight: 700;
-      color: #1f2937;
-    }
-
-    .markdown-body p {
-      margin-bottom: 0.5em;
-    }
-  </style>
 </head>
 
 <body>

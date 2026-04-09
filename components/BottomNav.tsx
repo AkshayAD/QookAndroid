@@ -15,7 +15,7 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     ] as const;
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 pb-safe pt-2 px-6 flex justify-between items-center z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden safe-area-bottom">
+        <nav className="app-bottom-nav fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 pt-2 px-6 flex justify-between items-center z-50 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] md:hidden">
             {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
                 const Icon = tab.icon;

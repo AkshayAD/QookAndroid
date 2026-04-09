@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { ChefHat, ArrowRight, CheckCircle2, Star, Sparkles, Loader2, AlertTriangle, Menu, X, Mail } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { getOAuthRedirectUrl, isNative } from '../utils/platform';
+import { ChefHat, ArrowRight, CheckCircle2, Star, Sparkles, AlertTriangle, Menu, X, Mail } from 'lucide-react';
+import { isSupabaseConfigured } from '../lib/supabase';
+import GoogleSignInButton from './GoogleSignInButton';
 
 interface LandingPageProps {
     isLoggedIn?: boolean;
     userEmail?: string;
     onGoToDashboard?: () => void;
-    onSignOut?: () => void;
+    onSignOut?: () => Promise<void> | void;
 }
 
 const LandingPage: React.FC<LandingPageProps> = ({
@@ -17,11 +17,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
     onSignOut
 }) => {
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-    const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-    // Auth State
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     // Capture referral code from URL on page load
@@ -40,32 +36,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
         }
     }, []);
 
-    const handleGoogleAuth = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const { error } = await supabase!.auth.signInWithOAuth({
-                provider: 'google',
-                options: {
-                    // Use platform-aware redirect
-                    redirectTo: isNative() ? getOAuthRedirectUrl() : window.location.origin + '/dashboard',
-                },
-            });
-            if (error) throw error;
-        } catch (err: any) {
-            setError(err.message || 'An error occurred');
-            setLoading(false);
-        }
-    };
-
-    const openAuth = (mode: 'signin' | 'signup') => {
-        setAuthMode(mode);
+    const openAuth = () => {
         setIsAuthModalOpen(true);
         setError(null);
     };
 
     // Config Check
-    if (!isSupabaseConfigured || !supabase) {
+    if (!isSupabaseConfigured) {
         return (
             <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
@@ -112,13 +89,13 @@ const LandingPage: React.FC<LandingPageProps> = ({
                                 ) : (
                                     <>
                                         <button
-                                            onClick={() => openAuth('signin')}
+                                            onClick={openAuth}
                                             className="text-sm font-semibold text-gray-900 hover:text-orange-600 transition-colors"
                                         >
                                             Log in
                                         </button>
                                         <button
-                                            onClick={() => openAuth('signup')}
+                                            onClick={openAuth}
                                             className="px-5 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-full hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
                                         >
                                             Get Started
@@ -150,8 +127,8 @@ const LandingPage: React.FC<LandingPageProps> = ({
                             </>
                         ) : (
                             <>
-                                <button onClick={() => { openAuth('signin'); setIsMobileMenuOpen(false); }} className="text-left text-base font-medium text-gray-700 py-2">Log in</button>
-                                <button onClick={() => { openAuth('signup'); setIsMobileMenuOpen(false); }} className="btn-primary w-full py-3 bg-orange-600 text-white rounded-lg font-bold">Get Started</button>
+                                <button onClick={() => { openAuth(); setIsMobileMenuOpen(false); }} className="text-left text-base font-medium text-gray-700 py-2">Log in</button>
+                                <button onClick={() => { openAuth(); setIsMobileMenuOpen(false); }} className="btn-primary w-full py-3 bg-orange-600 text-white rounded-lg font-bold">Get Started</button>
                             </>
                         )}
                     </div>
@@ -189,7 +166,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                         ) : (
                             <>
                                 <button
-                                    onClick={() => openAuth('signup')}
+                                    onClick={openAuth}
                                     className="w-full sm:w-auto px-8 py-4 bg-gray-900 text-white font-bold rounded-full hover:bg-gray-800 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 flex items-center justify-center gap-2 group"
                                 >
                                     Start Planning Free
@@ -377,7 +354,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     <p className="text-gray-400 text-lg mb-10 max-w-2xl mx-auto">Join thousands of home cooks who are saving time and eating better with QookCommander.</p>
 
                     <button
-                        onClick={() => openAuth('signup')}
+                        onClick={openAuth}
                         className="px-10 py-4 bg-white text-gray-900 font-bold rounded-full hover:bg-gray-100 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1"
                     >
                         Get Started Now
@@ -425,24 +402,15 @@ const LandingPage: React.FC<LandingPageProps> = ({
                     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative z-10 overflow-hidden animate-scale-in">
                         <div className="p-8">
                             <div className="text-center mb-8">
-                                <h2 className="text-2xl font-bold text-gray-900">Welcome to QookCommander</h2>
+                                <h2 className="text-2xl font-bold text-gray-900">Welcome to Qook</h2>
                                 <p className="text-gray-500 text-sm mt-1">Sign in with your Google account to get started</p>
                             </div>
 
                             <div className="space-y-4">
-                                <button
-                                    onClick={handleGoogleAuth}
-                                    disabled={loading}
-                                    className="w-full py-4 px-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md"
-                                >
-                                    {loading ? (
-                                        <Loader2 className="w-5 h-5 animate-spin" />
-                                    ) : (
-                                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
-                                    )}
-                                    {loading ? 'Signing In...' : 'Continue with Google'}
-                                </button>
-
+                                <GoogleSignInButton
+                                    onError={(nextError) => setError(nextError)}
+                                    showUnavailableMessage={true}
+                                />
                                 {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">{error}</div>}
                             </div>
                         </div>

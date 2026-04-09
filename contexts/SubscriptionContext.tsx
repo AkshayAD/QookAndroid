@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { useFamily } from './FamilyContext';
 import { useSettings } from './SettingsContext';
@@ -29,11 +29,60 @@ interface SubscriptionContextType {
     canGenerate: (type: 'meal' | 'grocery' | 'edit' | 'regen') => boolean;
     useCredits: (type: 'meal_generation' | 'grocery_generation' | 'smart_edit' | 'single_regen') => Promise<boolean>;
     checkRate: (action: string) => Promise<boolean>;
-    refreshCredits: () => Promise<void>;
+    refreshCredits: (options?: { force?: boolean }) => Promise<void>;
     claimBonus: () => Promise<boolean>;
 }
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
+const SUBSCRIPTION_BOOTSTRAP_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type SubscriptionBootstrapCache = {
+    subscription: UserSubscription | null;
+    credits: UserCredits | null;
+    fetchedAt: number;
+};
+
+function getSubscriptionBootstrapCacheKey(userId: string, familyGroupId: string | null) {
+    return `qookcommander_subscription_bootstrap_v1:${userId}:${familyGroupId ?? 'personal'}`;
+}
+
+function readSubscriptionBootstrapCache(userId: string, familyGroupId: string | null): SubscriptionBootstrapCache | null {
+    try {
+        const raw = window.localStorage.getItem(getSubscriptionBootstrapCacheKey(userId, familyGroupId));
+        if (!raw) {
+            return null;
+        }
+
+        const parsed = JSON.parse(raw) as SubscriptionBootstrapCache;
+        if (!parsed?.fetchedAt || Date.now() - parsed.fetchedAt > SUBSCRIPTION_BOOTSTRAP_CACHE_TTL_MS) {
+            return null;
+        }
+
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function writeSubscriptionBootstrapCache(
+    userId: string,
+    familyGroupId: string | null,
+    subscription: UserSubscription | null,
+    credits: UserCredits | null
+) {
+    try {
+        window.localStorage.setItem(
+            getSubscriptionBootstrapCacheKey(userId, familyGroupId),
+            JSON.stringify({
+                subscription,
+                credits,
+                fetchedAt: Date.now(),
+            } satisfies SubscriptionBootstrapCache)
+        );
+    } catch {
+        // Ignore cache write failures and continue with live data only.
+    }
+}
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
@@ -46,13 +95,15 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
     const [launchOfferTier, setLaunchOfferTier] = useState<string>('pro');
     const activeFamilyGroupId = isFamilyModeActive && familyGroup?.id ? familyGroup.id : null;
+    const creditRefreshPromiseRef = useRef<Promise<UserCredits | null> | null>(null);
+    const creditRefreshKeyRef = useRef<string | null>(null);
 
     const loadCreditSummary = useCallback(async (userId: string, familyGroupId: string | null): Promise<UserCredits | null> => {
         const candidateGroupIds = familyGroupId ? [familyGroupId, null] : [null];
 
         for (let attempt = 0; attempt < 2; attempt++) {
             for (const candidateGroupId of candidateGroupIds) {
-                const summary = await getUserCredits(userId, candidateGroupId);
+                const summary = await getUserCredits(userId, candidateGroupId, { force: attempt > 0 });
 
                 if (!summary) {
                     continue;
@@ -73,10 +124,44 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return null;
     }, [setFamilyModeActive]);
 
+    const refreshCreditSummary = useCallback(async (
+        userId: string,
+        familyGroupId: string | null,
+        options?: { force?: boolean }
+    ): Promise<UserCredits | null> => {
+        const requestKey = `${userId}:${familyGroupId ?? 'personal'}`;
+        const shouldReuseInFlight = !options?.force &&
+            creditRefreshPromiseRef.current &&
+            creditRefreshKeyRef.current === requestKey;
+
+        if (shouldReuseInFlight) {
+            return creditRefreshPromiseRef.current;
+        }
+
+        const requestPromise = loadCreditSummary(userId, familyGroupId).finally(() => {
+            if (creditRefreshPromiseRef.current === requestPromise) {
+                creditRefreshPromiseRef.current = null;
+                creditRefreshKeyRef.current = null;
+            }
+        });
+
+        creditRefreshPromiseRef.current = requestPromise;
+        creditRefreshKeyRef.current = requestKey;
+        return requestPromise;
+    }, [loadCreditSummary]);
+
     useEffect(() => {
         const loadSubscriptionData = async () => {
             setLoading(true);
             try {
+                if (user?.id) {
+                    const cachedState = readSubscriptionBootstrapCache(user.id, activeFamilyGroupId);
+                    if (cachedState) {
+                        setSubscription(cachedState.subscription);
+                        setCredits(cachedState.credits);
+                    }
+                }
+
                 const loadedPlans = await getSubscriptionPlans();
                 setPlans(loadedPlans);
 
@@ -103,8 +188,9 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
                 setSubscription(sub);
 
-                const summary = await loadCreditSummary(user.id, activeFamilyGroupId);
+                const summary = await refreshCreditSummary(user.id, activeFamilyGroupId, { force: true });
                 setCredits((previous) => summary ?? previous);
+                writeSubscriptionBootstrapCache(user.id, activeFamilyGroupId, sub, summary);
             } catch (error) {
                 console.error('Error loading subscription:', error);
             } finally {
@@ -113,12 +199,12 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         };
 
         loadSubscriptionData();
-    }, [user?.id, activeFamilyGroupId, loadCreditSummary]);
+    }, [user?.id, activeFamilyGroupId, refreshCreditSummary]);
 
     useEffect(() => {
         const handleRefreshCredits = () => {
             if (user?.id) {
-                loadCreditSummary(user.id, activeFamilyGroupId).then((summary) => {
+                refreshCreditSummary(user.id, activeFamilyGroupId, { force: true }).then((summary) => {
                     setCredits((previous) => summary ?? previous);
                 });
             }
@@ -126,7 +212,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
 
         window.addEventListener('refresh-credits', handleRefreshCredits);
         return () => window.removeEventListener('refresh-credits', handleRefreshCredits);
-    }, [user?.id, activeFamilyGroupId, loadCreditSummary]);
+    }, [user?.id, activeFamilyGroupId, refreshCreditSummary]);
 
     const isTrialActive = Boolean(
         subscription?.plan_id === 'free' &&
@@ -181,14 +267,14 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
         return checkRateLimit(user.id, action, 15);
     };
 
-    const refreshCredits = async () => {
+    const refreshCredits = useCallback(async (options?: { force?: boolean }) => {
         if (!user?.id) {
             return;
         }
 
-        const summary = await loadCreditSummary(user.id, activeFamilyGroupId);
+        const summary = await refreshCreditSummary(user.id, activeFamilyGroupId, { force: options?.force ?? true });
         setCredits((previous) => summary ?? previous);
-    };
+    }, [user?.id, activeFamilyGroupId, refreshCreditSummary]);
 
     const claimBonus = async (): Promise<boolean> => {
         if (!user?.id) {

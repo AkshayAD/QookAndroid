@@ -5,16 +5,16 @@
  * Uses trust-based verification (no OTP required).
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Phone, Gift, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { completeTrustAction } from '../services/trustActions';
+import { completeTrustAction, hashPhoneNumber } from '../services/trustActions';
 import { supabase } from '../lib/supabase';
 
 interface PhonePromptModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSuccess?: (creditsAwarded: number) => void;
+    onSuccess?: (creditsAwarded: number) => void | Promise<void>;
 }
 
 export default function PhonePromptModal({ isOpen, onClose, onSuccess }: PhonePromptModalProps) {
@@ -23,7 +23,20 @@ export default function PhonePromptModal({ isOpen, onClose, onSuccess }: PhonePr
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    useEffect(() => {
+        if (isOpen) {
+            setPhone('');
+            setError('');
+            setLoading(false);
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
+
+    function emitTrustRefreshEvents() {
+        window.dispatchEvent(new CustomEvent('trust-actions-updated'));
+        window.dispatchEvent(new CustomEvent('refresh-credits'));
+    }
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -41,53 +54,59 @@ export default function PhonePromptModal({ isOpen, onClose, onSuccess }: PhonePr
 
         try {
             // Hash the phone number for storage (privacy)
-            const phoneHash = await hashPhone(cleaned);
+            const phoneHash = await hashPhoneNumber(cleaned);
 
             // Check if phone already used by another account
-            const { data: existing } = await supabase
+            const { data: existing, error: existingError } = await supabase
                 .from('user_profiles')
                 .select('id')
                 .eq('phone_hash', phoneHash)
                 .neq('id', user.id)
-                .single();
+                .limit(1)
+                .maybeSingle();
+
+            if (existingError) {
+                throw existingError;
+            }
 
             if (existing) {
                 setError('This phone number is already linked to another account');
-                setLoading(false);
                 return;
             }
 
-            // Save phone to profile
-            await supabase
+            const { error: profileError } = await supabase
                 .from('user_profiles')
-                .update({
+                .upsert({
+                    id: user.id,
                     phone: cleaned,
                     phone_hash: phoneHash
-                })
-                .eq('id', user.id);
+                }, { onConflict: 'id' });
+
+            if (profileError) {
+                throw profileError;
+            }
 
             // Award trust credits
             const result = await completeTrustAction(user.id, 'add_phone', { phone: cleaned });
 
             if (result.creditsAwarded > 0) {
-                onSuccess?.(result.creditsAwarded);
+                setLoading(false);
+                emitTrustRefreshEvents();
+                onClose();
+                void Promise.resolve(onSuccess?.(result.creditsAwarded)).catch((callbackError) => {
+                    console.error('Failed to refresh phone reward UI:', callbackError);
+                });
+                return;
             }
 
+            setLoading(false);
             onClose();
         } catch (err) {
             console.error('Failed to save phone:', err);
             setError('Failed to save phone number. Please try again.');
+        } finally {
+            setLoading(false);
         }
-
-        setLoading(false);
-    }
-
-    async function hashPhone(phone: string): Promise<string> {
-        const encoder = new TextEncoder();
-        const data = encoder.encode(phone);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
     return (

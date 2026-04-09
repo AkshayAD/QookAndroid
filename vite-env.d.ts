@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY?: string;
   readonly VITE_RAZORPAY_KEY_ID?: string;
   readonly VITE_GOOGLE_CLIENT_ID?: string;
+  readonly VITE_ANDROID_WEB_AUTH_FALLBACK?: string;
 }
 
 interface ImportMeta {

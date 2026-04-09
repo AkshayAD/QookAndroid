@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
-    canUseGoogleIdentityServices,
-    canUseLegacyGoogleOAuth,
+    getGoogleSignInMode,
     getGoogleSignInUnavailableMessage,
-    googleWebClientId,
+    openNativeGoogleAuthHandoff,
+    type GoogleSignInMode,
+    signInWithNativeGoogleIdToken,
     signInWithGoogleIdToken,
-    signInWithGoogleOAuth,
 } from '../lib/googleAuth';
+import {
+    isNativeGoogleAuthCancellation,
+    shouldFallbackToHostedGoogleAuth,
+} from '../lib/nativeGoogleAuth';
 
 declare global {
     interface Window {
@@ -83,8 +87,9 @@ const GoogleMark = () => (
 );
 
 interface GoogleSignInButtonProps {
+    mode?: 'auto' | GoogleSignInMode;
     onError?: (message: string) => void;
-    onSuccess?: () => void;
+    onSuccess?: () => void | Promise<void>;
     showUnavailableMessage?: boolean;
     fallbackButtonClassName?: string;
     fallbackLabel?: string;
@@ -94,6 +99,7 @@ interface GoogleSignInButtonProps {
 const defaultFallbackClassName = 'w-full py-4 px-4 bg-white border-2 border-gray-200 rounded-xl font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all flex items-center justify-center gap-3 shadow-sm hover:shadow-md disabled:opacity-50';
 
 const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
+    mode = 'auto',
     onError,
     onSuccess,
     showUnavailableMessage = false,
@@ -104,22 +110,14 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
     const containerRef = useRef<HTMLDivElement | null>(null);
     const [isReady, setIsReady] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [isLegacyLoading, setIsLegacyLoading] = useState(false);
+    const [isNativeLoading, setIsNativeLoading] = useState(false);
 
-    const mode = useMemo(() => {
-        if (canUseGoogleIdentityServices()) {
-            return 'gis';
-        }
-
-        if (canUseLegacyGoogleOAuth()) {
-            return 'legacy';
-        }
-
-        return 'disabled';
-    }, []);
+    const resolvedMode = useMemo<GoogleSignInMode>(() => (
+        mode === 'auto' ? getGoogleSignInMode() : mode
+    ), [mode]);
 
     useEffect(() => {
-        if (mode !== 'gis' || !containerRef.current) {
+        if (resolvedMode !== 'web-gis' || !containerRef.current) {
             return;
         }
 
@@ -146,7 +144,7 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
 
                         try {
                             await signInWithGoogleIdToken(credential);
-                            onSuccess?.();
+                            await onSuccess?.();
                         } catch (error) {
                             const message = error instanceof Error ? error.message : 'Google sign-in failed.';
                             onError?.(message);
@@ -182,9 +180,9 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
                 containerRef.current.innerHTML = '';
             }
         };
-    }, [mode, onError, onSuccess]);
+    }, [resolvedMode, onError, onSuccess]);
 
-    if (mode === 'gis') {
+    if (resolvedMode === 'web-gis') {
         return (
             <div className="space-y-3">
                 <div ref={containerRef} className="min-h-[44px] w-full" />
@@ -198,29 +196,51 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         );
     }
 
-    if (mode === 'legacy') {
+    if (resolvedMode === 'native-direct') {
         return (
             <button
                 type="button"
                 onClick={async () => {
-                    setIsLegacyLoading(true);
+                    setIsNativeLoading(true);
                     try {
-                        await signInWithGoogleOAuth();
+                        await signInWithNativeGoogleIdToken();
+                        await onSuccess?.();
                     } catch (error) {
+                        if (isNativeGoogleAuthCancellation(error)) {
+                            setIsNativeLoading(false);
+                            return;
+                        }
+
+                        if (shouldFallbackToHostedGoogleAuth(error)) {
+                            try {
+                                await openNativeGoogleAuthHandoff(() => {
+                                    setIsNativeLoading(false);
+                                });
+                                return;
+                            } catch (fallbackError) {
+                                const fallbackMessage = fallbackError instanceof Error
+                                    ? fallbackError.message
+                                    : 'Qook could not open Google sign-in.';
+                                onError?.(fallbackMessage);
+                                return;
+                            }
+                        }
+
                         const message = error instanceof Error ? error.message : 'Google sign-in failed.';
                         onError?.(message);
-                        setIsLegacyLoading(false);
+                    } finally {
+                        setIsNativeLoading(false);
                     }
                 }}
-                disabled={isLegacyLoading}
+                disabled={isNativeLoading}
                 className={fallbackButtonClassName}
             >
-                {isLegacyLoading ? (
+                {isNativeLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                     <GoogleMark />
                 )}
-                <span>{isLegacyLoading ? fallbackLoadingLabel : fallbackLabel}</span>
+                <span>{isNativeLoading ? fallbackLoadingLabel : fallbackLabel}</span>
             </button>
         );
     }

@@ -48,7 +48,7 @@ export async function registerDevice(userId: string): Promise<{
         .from('user_devices')
         .select('user_id, trial_granted')
         .eq('device_hash', deviceHash)
-        .single();
+        .maybeSingle();
 
     if (existingDevice) {
         // Device exists - check if it's a different user
@@ -106,7 +106,7 @@ export async function isDeviceEligibleForTrial(): Promise<boolean> {
         .from('user_devices')
         .select('trial_granted')
         .eq('device_hash', deviceHash)
-        .single();
+        .maybeSingle();
 
     // If no record or trial_granted is false, device is eligible
     return !data?.trial_granted;

@@ -7,12 +7,15 @@
  */
 
 import { supabase } from '../lib/supabase';
+import type { SelectableMealType } from '../lib/mealSelection';
 import { sanitizeGroceryItems, sanitizeMealAlternatives, sanitizeMealText, sanitizeWeeklyPlan } from '../lib/mealSanitizer';
 import { GroceryItem, MealAlternatives, MealHistoryEntry, UserPreferences, WeeklyPlan } from '../types';
 import type { LearningSuggestions } from './geminiService';
 import { getApiBaseUrl } from '../utils/platform';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner';
+export type SmartEditMealOptions = Partial<Record<SelectableMealType, string[]>>;
+export type SmartEditMealUpdates = Partial<Record<SelectableMealType, string>>;
 
 interface ProxyResponse<T = unknown> {
   success: boolean;
@@ -157,6 +160,7 @@ export async function regenerateMealViaProxy(
   preferences: unknown,
   dayName: string,
   existingMeals: string[] = [],
+  learningSummary?: unknown,
   familyGroupId?: string | null,
   userApiKey?: string
 ): Promise<string> {
@@ -165,7 +169,7 @@ export async function regenerateMealViaProxy(
   const result = await callAiProxy<{ meal: string }>(
     'regenerate_meal',
     userId,
-    { currentMeal, mealType, preferences, dayName, existingMeals },
+    { currentMeal, mealType, preferences, dayName, existingMeals, learningSummary },
     normalized.familyGroupId,
     normalized.userApiKey
   );
@@ -175,19 +179,20 @@ export async function regenerateMealViaProxy(
 
 export async function smartEditViaProxy(
   userId: string,
-  currentMeals: Record<string, string>,
+  currentMeals: Partial<Record<SelectableMealType, string>>,
   instruction: string,
-  mealTypes: string[],
+  mealTypes: SelectableMealType[],
   preferences: unknown,
+  learningSummary?: unknown,
   familyGroupId?: string | null,
   userApiKey?: string
-): Promise<{ options: Record<string, string[]> }> {
+): Promise<{ options: SmartEditMealOptions }> {
   const normalized = normalizeOptionalArgs(familyGroupId, userApiKey);
 
-  const result = await callAiProxy<{ options: Record<string, string[]> }>(
+  const result = await callAiProxy<{ options: SmartEditMealOptions }>(
     'smart_edit',
     userId,
-    { currentMeals, instruction, mealTypes, preferences },
+    { currentMeals, instruction, mealTypes, preferences, learningSummary },
     normalized.familyGroupId,
     normalized.userApiKey
   );
@@ -198,7 +203,7 @@ export async function smartEditViaProxy(
         key,
         (values || []).map((value) => sanitizeMealText(value)).filter(Boolean),
       ])
-    ),
+    ) as SmartEditMealOptions,
   };
 }
 

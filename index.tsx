@@ -1,13 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import AppRouter from './Router';
+import './styles.css';
 import { AuthProvider } from './contexts/AuthContext';
+import { FamilyProvider } from './contexts/FamilyContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
-import { FamilyProvider } from './contexts/FamilyContext';
-import { initAndroidApp } from './utils/platform';
+import { cleanupLegacyWebViewState, initAndroidApp } from './utils/platform';
 
 // Initialize Android-specific features (no-op on web)
+void cleanupLegacyWebViewState();
 initAndroidApp();
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -19,11 +21,11 @@ root.render(
   <React.StrictMode>
     <AuthProvider>
       <SettingsProvider>
-        <SubscriptionProvider>
-          <FamilyProvider>
+        <FamilyProvider>
+          <SubscriptionProvider>
             <AppRouter />
-          </FamilyProvider>
-        </SubscriptionProvider>
+          </SubscriptionProvider>
+        </FamilyProvider>
       </SettingsProvider>
     </AuthProvider>
   </React.StrictMode>

@@ -13,6 +13,7 @@ export { supabase };
 import {
     PreferenceProfile,
     WeeklyPlan,
+    PersistedWeeklyPlan,
     DayPlan,
     Schedule,
     GroceryItem,
@@ -22,6 +23,7 @@ import {
     PreferenceSignal,
     SavedGroceryList
 } from '../types';
+import { buildWeekFromSchedule, toDateKey } from '../lib/plannerResolution';
 
 // Helper to check if we should use localStorage instead of Supabase
 // Returns true if Supabase is not configured OR if user is in "local/offline" mode
@@ -41,7 +43,14 @@ function isMissingRelationError(error: unknown): boolean {
 
     const message = 'message' in error ? String(error.message || '') : '';
     const details = 'details' in error ? String(error.details || '') : '';
-    return /relation .* does not exist/i.test(message) || /relation .* does not exist/i.test(details);
+    const code = 'code' in error ? String(error.code || '') : '';
+    const combined = `${message}\n${details}`;
+    return (
+        /relation .* does not exist/i.test(combined) ||
+        /could not find the table .* in the schema cache/i.test(combined) ||
+        /schema cache/i.test(combined) ||
+        code === 'PGRST205'
+    );
 }
 
 function readLocalCollection<T>(key: string): T[] {
@@ -64,6 +73,7 @@ export interface UserSettings {
     currentProfileId?: string;
     preferredLanguage?: 'English' | 'Hindi';
     onboardingCompleted?: boolean;
+    tourCompletedAt?: string | null;
     displayName?: string;
 }
 
@@ -77,6 +87,7 @@ export const getUserSettings = async (userId: string): Promise<UserSettings | nu
             currentProfileId: localStorage.getItem('cookcommander_current_profile_id') || undefined,
             preferredLanguage: (localStorage.getItem('cookcommander_preferred_language') as 'English' | 'Hindi') || 'English',
             onboardingCompleted: localStorage.getItem('qook_onboarding_completed') === 'true',
+            tourCompletedAt: localStorage.getItem('cookcommander_tour_completed_at'),
             displayName: localStorage.getItem('cookcommander_display_name') || ''
         };
     }
@@ -84,11 +95,11 @@ export const getUserSettings = async (userId: string): Promise<UserSettings | nu
     try {
         const { data, error } = await supabase
             .from('user_settings')
-            .select('*')
+            .select('gemini_api_key, cook_name, cook_whatsapp_number, current_profile_id, preferred_language, onboarding_completed, tour_completed_at, display_name')
             .eq('user_id', userId)
-            .single();
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+        if (error) {
             console.error('Error fetching user settings:', error);
             return null;
         }
@@ -102,6 +113,7 @@ export const getUserSettings = async (userId: string): Promise<UserSettings | nu
             currentProfileId: data.current_profile_id || undefined,
             preferredLanguage: (data.preferred_language as 'English' | 'Hindi') || 'English',
             onboardingCompleted: data.onboarding_completed ?? false,
+            tourCompletedAt: data.tour_completed_at ?? null,
             displayName: data.display_name || ''
         };
     } catch (err) {
@@ -119,6 +131,13 @@ export const saveUserSettings = async (userId: string, settings: Partial<UserSet
         if (settings.currentProfileId !== undefined) localStorage.setItem('cookcommander_current_profile_id', settings.currentProfileId);
         if (settings.preferredLanguage !== undefined) localStorage.setItem('cookcommander_preferred_language', settings.preferredLanguage);
         if (settings.onboardingCompleted !== undefined) localStorage.setItem('qook_onboarding_completed', String(settings.onboardingCompleted));
+        if (settings.tourCompletedAt !== undefined) {
+            if (settings.tourCompletedAt) {
+                localStorage.setItem('cookcommander_tour_completed_at', settings.tourCompletedAt);
+            } else {
+                localStorage.removeItem('cookcommander_tour_completed_at');
+            }
+        }
         if (settings.displayName !== undefined) localStorage.setItem('cookcommander_display_name', settings.displayName);
         return;
     }
@@ -131,6 +150,7 @@ export const saveUserSettings = async (userId: string, settings: Partial<UserSet
         if (settings.currentProfileId !== undefined) updateData.current_profile_id = settings.currentProfileId;
         if (settings.preferredLanguage !== undefined) updateData.preferred_language = settings.preferredLanguage;
         if (settings.onboardingCompleted !== undefined) updateData.onboarding_completed = settings.onboardingCompleted;
+        if (settings.tourCompletedAt !== undefined) updateData.tour_completed_at = settings.tourCompletedAt;
         if (settings.displayName !== undefined) updateData.display_name = settings.displayName;
 
         const { error } = await supabase
@@ -156,6 +176,42 @@ export interface UserProfile {
     phone: string;
     city: string;
 }
+
+function buildUserProfileUpdateData(userId: string, profile: Partial<UserProfile>) {
+    const updateData: any = {
+        id: userId,
+        updated_at: new Date().toISOString(),
+    };
+
+    if (profile.displayName !== undefined) updateData.display_name = profile.displayName;
+    if (profile.phone !== undefined) updateData.phone = profile.phone;
+    if (profile.city !== undefined) updateData.city = profile.city;
+
+    return updateData;
+}
+
+export const ensureUserProfile = async (
+    userId: string,
+    profile: Partial<UserProfile> = {}
+): Promise<void> => {
+    if (isOfflineMode(userId)) {
+        return;
+    }
+
+    try {
+        const { error } = await supabase
+            .from('user_profiles')
+            .upsert(buildUserProfileUpdateData(userId, profile), { onConflict: 'id' });
+
+        if (error) {
+            console.error('Error ensuring user profile:', error);
+            throw error;
+        }
+    } catch (err) {
+        console.error('Error in ensureUserProfile:', err);
+        throw err;
+    }
+};
 
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
     try {
@@ -184,16 +240,14 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
 };
 
 export const saveUserProfile = async (userId: string, profile: Partial<UserProfile>): Promise<void> => {
-    try {
-        const updateData: any = { updated_at: new Date().toISOString() };
-        if (profile.displayName !== undefined) updateData.display_name = profile.displayName;
-        if (profile.phone !== undefined) updateData.phone = profile.phone;
-        if (profile.city !== undefined) updateData.city = profile.city;
+    if (isOfflineMode(userId)) {
+        return;
+    }
 
+    try {
         const { error } = await supabase
             .from('user_profiles')
-            .update(updateData)
-            .eq('id', userId);
+            .upsert(buildUserProfileUpdateData(userId, profile), { onConflict: 'id' });
 
         if (error) {
             console.error('Error saving user profile:', error);
@@ -406,6 +460,21 @@ const scheduledMealRowToDay = (row: ScheduledMealRow): DayPlan => ({
     dinner: row.dinner || '',
 });
 
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const inferWeekStartDate = (plan?: WeeklyPlan | null): string | null => {
+    const firstDay = plan?.days?.[0]?.day;
+    return firstDay && ISO_DATE_PATTERN.test(firstDay) ? firstDay : null;
+};
+
+const toPersistedWeeklyPlan = (
+    plan?: WeeklyPlan | null,
+    weekStartDate?: string | null
+): PersistedWeeklyPlan => sanitizeWeeklyPlan({
+    ...(plan || { days: [] }),
+    weekStartDate: weekStartDate ?? inferWeekStartDate(plan) ?? null,
+}) as PersistedWeeklyPlan;
+
 // ============================================================================
 // PREFERENCE PROFILES
 // ============================================================================
@@ -490,15 +559,15 @@ export const deletePreferenceProfile = async (profileId: string, userId: string 
 // WEEKLY PLANS
 // ============================================================================
 
-export const getCurrentPlan = async (userId: string, familyGroupId?: string | null): Promise<WeeklyPlan | null> => {
+export const getCurrentPlan = async (userId: string, familyGroupId?: string | null): Promise<PersistedWeeklyPlan | null> => {
     if (isOfflineMode(userId)) {
         const saved = localStorage.getItem('qookcommander_plan');
-        return saved ? sanitizeWeeklyPlan(JSON.parse(saved)) : null;
+        return saved ? toPersistedWeeklyPlan(JSON.parse(saved)) : null;
     }
 
     let query = supabase
         .from('weekly_plans')
-        .select('*')
+        .select('days, week_start_date, created_at')
         .eq('user_id', userId)
         .eq('is_current', true);
 
@@ -512,16 +581,21 @@ export const getCurrentPlan = async (userId: string, familyGroupId?: string | nu
     const { data, error } = await query
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
     if (error) {
-        // PGRST116 = no rows returned for single(), 406 = Not Acceptable (often means no/multiple rows)
-        if (error.code === 'PGRST116' || error.message?.includes('406')) return null;
         console.error('Error fetching plan:', error);
         throw error;
     }
 
-    return sanitizeWeeklyPlan({ days: data.days as DayPlan[] });
+    if (!data) {
+        return null;
+    }
+
+    return toPersistedWeeklyPlan(
+        { days: data.days as DayPlan[] },
+        data.week_start_date || null
+    );
 };
 
 export const savePlan = async (
@@ -530,7 +604,7 @@ export const savePlan = async (
     profileId?: string,
     familyGroupId?: string | null
 ): Promise<string> => {
-    const sanitizedPlan = sanitizeWeeklyPlan(plan);
+    const sanitizedPlan = toPersistedWeeklyPlan(plan, (plan as PersistedWeeklyPlan).weekStartDate ?? null);
     if (isOfflineMode(userId)) {
         localStorage.setItem('qookcommander_plan', JSON.stringify(sanitizedPlan));
         return 'local';
@@ -553,11 +627,13 @@ export const savePlan = async (
         user_id: userId,
         profile_id: profileId,
         days: sanitizedPlan.days as any,
+        week_start_date: sanitizedPlan.weekStartDate,
         is_current: true,
     };
 
     if (familyGroupId) {
         insertData.family_group_id = familyGroupId;
+        insertData.last_modified_by = userId;
     }
 
     const { data, error } = await supabase
@@ -615,7 +691,7 @@ export const getSchedule = async (
 
     let query = supabase
         .from('scheduled_meals')
-        .select('*');
+        .select('date, breakfast, lunch, dinner, prep_ahead, alternatives');
 
     // If familyGroupId is provided, fetch family meals; otherwise fetch personal meals
     if (familyGroupId) {
@@ -631,7 +707,7 @@ export const getSchedule = async (
         query = query.lte('date', endDate);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await query.order('date', { ascending: true });
 
     if (error) {
         console.error('Error fetching schedule:', error);
@@ -776,8 +852,7 @@ export const archivePlanToSchedule = async (
         throw error;
     }
 
-    // Clear current plan (for this context - personal or family)
-    await clearCurrentPlan(userId, familyGroupId);
+    // Keep the current draft intact so planner previews continue to prefer the active draft.
 };
 
 // Helper to add days to a date string
@@ -1680,27 +1755,17 @@ export const getWeekFromSchedule = async (
     userId: string,
     weekStartDate: string,
     familyGroupId?: string | null
-): Promise<WeeklyPlan | null> => {
+): Promise<PersistedWeeklyPlan | null> => {
     if (isOfflineMode(userId)) {
         const saved = localStorage.getItem('qookcommander_schedule');
         if (!saved) return null;
 
         const schedule: Schedule = JSON.parse(saved);
-        const days: DayPlan[] = [];
-
-        for (let i = 0; i < 7; i++) {
-            const date = addDays(weekStartDate, i);
-            const dayPlan = schedule[date];
-            if (dayPlan) {
-                days.push(dayPlan);
-            } else {
-                days.push({ day: date, breakfast: '', lunch: '', dinner: '' });
-            }
-        }
+        const plan = buildWeekFromSchedule(schedule, weekStartDate);
 
         // Only return if at least one day has meals
-        const hasMeals = days.some(d => d.breakfast || d.lunch || d.dinner);
-        return hasMeals ? { days } : null;
+        const hasMeals = plan.days.some(d => d.breakfast || d.lunch || d.dinner);
+        return hasMeals ? plan : null;
     }
 
     const endDate = addDays(weekStartDate, 6);
@@ -1727,25 +1792,21 @@ export const getWeekFromSchedule = async (
 
     if (!data || data.length === 0) return null;
 
-    // Build the 7-day plan
-    const days: DayPlan[] = [];
-    for (let i = 0; i < 7; i++) {
-        const date = addDays(weekStartDate, i);
-        const meal = data.find((m: any) => m.date === date);
-        if (meal) {
-            days.push(sanitizeDayPlan({
+    const schedule = Object.fromEntries(
+        data.map((meal: any) => [
+            meal.date,
+            sanitizeDayPlan({
                 day: meal.date,
                 breakfast: meal.breakfast || '',
                 lunch: meal.lunch || '',
                 dinner: meal.dinner || '',
-                prepAhead: meal.prep_ahead || undefined
-            }));
-        } else {
-            days.push({ day: date, breakfast: '', lunch: '', dinner: '' });
-        }
-    }
+                prepAhead: meal.prep_ahead || undefined,
+                alternatives: meal.alternatives || null,
+            }),
+        ])
+    );
 
-    return { days };
+    return buildWeekFromSchedule(schedule, weekStartDate);
 };
 
 // Get count of existing meals in a week (for conflict detection)
@@ -1807,7 +1868,7 @@ export const mergeWeekMeals = async (
         // Only save if we're adding something new
         if (mergedDay.breakfast || mergedDay.lunch || mergedDay.dinner) {
             // Get existing to merge
-            const schedule = await getSchedule(userId, date, date);
+            const schedule = await getSchedule(userId, date, date, familyGroupId);
             const existingMeals = schedule[date] || { day: date, breakfast: '', lunch: '', dinner: '' };
 
             await saveScheduledMeal(date, {
@@ -1818,7 +1879,4 @@ export const mergeWeekMeals = async (
             }, userId, familyGroupId);
         }
     }
-
-    // Clear current plan
-    await clearCurrentPlan(userId);
 };

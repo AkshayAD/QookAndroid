@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS public.weekly_plans (
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   profile_id UUID REFERENCES public.preference_profiles(id) ON DELETE SET NULL,
   days JSONB NOT NULL,  -- Array of DayPlan objects
+  week_start_date DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   is_current BOOLEAN DEFAULT TRUE
 );
@@ -84,6 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_preference_profiles_user ON public.preference_pro
 CREATE INDEX IF NOT EXISTS idx_scheduled_meals_user_date ON public.scheduled_meals(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_meal_history_user ON public.meal_history(user_id);
 CREATE INDEX IF NOT EXISTS idx_weekly_plans_user ON public.weekly_plans(user_id);
+CREATE INDEX IF NOT EXISTS idx_weekly_plans_user_current_week ON public.weekly_plans(user_id, is_current, week_start_date);
 
 -- Enable Row Level Security on all tables
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
