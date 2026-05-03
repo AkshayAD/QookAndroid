@@ -59,7 +59,9 @@ export default async function handler(req, res) {
             p_order_id: razorpay_order_id || razorpay_subscription_id,
             p_payment_id: razorpay_payment_id,
             p_signature: razorpay_signature,
-            p_plan_id: plan_id
+            p_plan_id: plan_id,
+            p_type: type || 'subscription',
+            p_subscription_id: razorpay_subscription_id || null,
         });
 
         if (error) throw error;
