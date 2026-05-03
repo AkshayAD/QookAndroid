@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { createClient as createAnonClient } from '@supabase/supabase-js';
 
 /**
  * Cancel Subscription API
@@ -22,6 +23,20 @@ export default async function handler(req: any, res: any) {
             return res.status(400).json({ error: 'user_id is required' });
         }
 
+        // Auth validation: verify the caller is the user themselves
+        const authHeader = req.headers.authorization;
+        if (authHeader) {
+            const token = authHeader.replace('Bearer ', '');
+            const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
+            if (anonKey) {
+                const authClient = createAnonClient(supabaseUrl, anonKey);
+                const { data: { user: authUser } } = await authClient.auth.getUser(token);
+                if (authUser && authUser.id !== user_id) {
+                    return res.status(403).json({ error: 'Cannot cancel another user\'s subscription' });
+                }
+            }
+        }
+
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
         // 1. Get user's current subscription
@@ -29,6 +44,7 @@ export default async function handler(req: any, res: any) {
             .from('user_subscriptions')
             .select('*')
             .eq('user_id', user_id)
+            .in('status', ['active', 'pending'])
             .single();
 
         if (subError || !subscription) {
@@ -71,7 +87,7 @@ export default async function handler(req: any, res: any) {
             }
         }
 
-        // 3. Update database - mark as cancelled
+        // 3. Update database - mark as cancelled (only active/pending subscriptions)
         const { error: updateError } = await supabase
             .from('user_subscriptions')
             .update({
@@ -79,7 +95,8 @@ export default async function handler(req: any, res: any) {
                 cancelled_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             })
-            .eq('user_id', user_id);
+            .eq('user_id', user_id)
+            .in('status', ['active', 'pending']);
 
         if (updateError) {
             console.error('Database update error:', updateError);
