@@ -1,5 +1,5 @@
 import Razorpay from 'razorpay';
-import { createClient as createAnonClient } from '@supabase/supabase-js';
+import { authenticateSupabaseUser } from '../lib/supabaseAuth';
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -14,18 +14,9 @@ export default async function handler(req, res) {
 
     // Auth validation: verify the caller is the user themselves
     if (user_id) {
-        const authHeader = req.headers.authorization;
-        if (authHeader) {
-            const token = authHeader.replace('Bearer ', '');
-            const supabaseUrl = process.env.VITE_SUPABASE_URL;
-            const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
-            if (supabaseUrl && anonKey) {
-                const authClient = createAnonClient(supabaseUrl, anonKey);
-                const { data: { user: authUser } } = await authClient.auth.getUser(token);
-                if (authUser && authUser.id !== user_id) {
-                    return res.status(403).json({ error: 'Cannot create order for another user' });
-                }
-            }
+        const { userId: authUserId } = await authenticateSupabaseUser(req.headers.authorization);
+        if (authUserId && authUserId !== user_id) {
+            return res.status(403).json({ error: 'Cannot create order for another user' });
         }
     }
 

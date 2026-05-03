@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { createClient as createAnonClient } from '@supabase/supabase-js';
+import { authenticateSupabaseUser } from '../lib/supabaseAuth';
 
 /**
  * Cancel Subscription API
@@ -24,17 +24,9 @@ export default async function handler(req: any, res: any) {
         }
 
         // Auth validation: verify the caller is the user themselves
-        const authHeader = req.headers.authorization;
-        if (authHeader) {
-            const token = authHeader.replace('Bearer ', '');
-            const anonKey = process.env.VITE_SUPABASE_ANON_KEY;
-            if (anonKey) {
-                const authClient = createAnonClient(supabaseUrl, anonKey);
-                const { data: { user: authUser } } = await authClient.auth.getUser(token);
-                if (authUser && authUser.id !== user_id) {
-                    return res.status(403).json({ error: 'Cannot cancel another user\'s subscription' });
-                }
-            }
+        const { userId: authUserId } = await authenticateSupabaseUser(req.headers.authorization);
+        if (authUserId && authUserId !== user_id) {
+            return res.status(403).json({ error: 'Cannot cancel another user\'s subscription' });
         }
 
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
