@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getFeatureMatrix, updateFeatureAccess } from './admin-api';
+import { getFeatureMatrix, updateFeatureAccess } from '../api/admin-api';
 
 function createSupabaseMock(options: {
     updatedRows?: any[];

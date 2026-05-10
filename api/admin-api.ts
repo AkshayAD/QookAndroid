@@ -1,5 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
-import { DEFAULT_FEATURE_TIERS } from '../lib/billing/featureAccess';
+
+const DEFAULT_FEATURE_TIERS: Record<string, string[]> = {
+    meal_generation: ['free', 'basic', 'pro', 'family_pro', 'byok'],
+    single_regen: ['basic', 'pro', 'family_pro', 'byok'],
+    smart_edit: ['basic', 'pro', 'family_pro', 'byok'],
+    grocery_generation: ['basic', 'pro', 'family_pro', 'byok'],
+    full_recipe_panel: ['basic', 'pro', 'family_pro', 'byok'],
+    nutrition_info: ['pro', 'family_pro'],
+    ingredient_add: ['pro', 'family_pro'],
+    export_share: ['pro', 'family_pro'],
+    priority_support: ['pro', 'family_pro'],
+    family_mode: ['family_pro'],
+    shared_grocery: ['family_pro'],
+    family_activity_log: ['family_pro'],
+    show_quantity: ['basic', 'pro', 'family_pro', 'byok'],
+    prep_ahead: ['basic', 'pro', 'family_pro', 'byok'],
+};
 
 /**
  * Admin API for QookCommander
