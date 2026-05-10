@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { DEFAULT_FEATURE_TIERS } from '../lib/billing/featureAccess';
 
 /**
  * Admin API for QookCommander
@@ -1546,7 +1547,7 @@ async function modifyCredits(
 // Feature Matrix Management
 // =====================================================
 
-async function getFeatureMatrix(supabase: any) {
+export async function getFeatureMatrix(supabase: any) {
     // Get all feature tier access records
     const { data: matrix, error } = await supabase
         .from('feature_tier_access')
@@ -1562,11 +1563,23 @@ async function getFeatureMatrix(supabase: any) {
         .select('id, name')
         .order('price_inr');
 
-    // Get unique features
-    const features = [...new Set(matrix?.map((m: any) => m.feature_id) || [])];
+    const tierIds = (tiers || []).map((tier: any) => tier.id);
+    const features = [
+        ...new Set([
+            ...Object.keys(DEFAULT_FEATURE_TIERS),
+            ...(matrix?.map((m: any) => m.feature_id) || []),
+        ]),
+    ];
 
-    // Organize into a matrix structure
     const featureMap: Record<string, Record<string, boolean>> = {};
+    features.forEach((feature) => {
+        const defaultTiers = DEFAULT_FEATURE_TIERS[feature as keyof typeof DEFAULT_FEATURE_TIERS] || [];
+        featureMap[feature] = {};
+        tierIds.forEach((tierId: string) => {
+            featureMap[feature][tierId] = defaultTiers.includes(tierId);
+        });
+    });
+
     matrix?.forEach((m: any) => {
         if (!featureMap[m.feature_id]) {
             featureMap[m.feature_id] = {};
@@ -1577,15 +1590,33 @@ async function getFeatureMatrix(supabase: any) {
     return { matrix, tiers, features, featureMap };
 }
 
-async function updateFeatureAccess(supabase: any, adminId: string, featureId: string, tierId: string, enabled: boolean) {
-    // Update the feature access
-    const { error } = await supabase
+export async function updateFeatureAccess(supabase: any, adminId: string, featureId: string, tierId: string, enabled: boolean) {
+    const updatedAt = new Date().toISOString();
+    const { data: updatedRows, error: updateError } = await supabase
         .from('feature_tier_access')
-        .update({ enabled, updated_at: new Date().toISOString() })
+        .update({ enabled, updated_at: updatedAt })
         .eq('feature_id', featureId)
-        .eq('tier_id', tierId);
+        .eq('tier_id', tierId)
+        .select('feature_id, tier_id, enabled, updated_at');
 
-    if (error) throw error;
+    if (updateError) throw updateError;
+
+    let featureAccess = updatedRows?.[0];
+    if (!featureAccess) {
+        const { data: insertedRow, error: insertError } = await supabase
+            .from('feature_tier_access')
+            .insert({
+                feature_id: featureId,
+                tier_id: tierId,
+                enabled,
+                updated_at: updatedAt,
+            })
+            .select('feature_id, tier_id, enabled, updated_at')
+            .single();
+
+        if (insertError) throw insertError;
+        featureAccess = insertedRow;
+    }
 
     // Log the action
     await supabase.from('admin_audit_log').insert({
@@ -1594,7 +1625,11 @@ async function updateFeatureAccess(supabase: any, adminId: string, featureId: st
         details: { feature_id: featureId, tier_id: tierId, enabled }
     });
 
-    return { success: true, message: `Feature ${featureId} ${enabled ? 'enabled' : 'disabled'} for ${tierId}` };
+    return {
+        success: true,
+        message: `Feature ${featureId} ${featureAccess.enabled ? 'enabled' : 'disabled'} for ${tierId}`,
+        featureAccess,
+    };
 }
 
 async function getSubscriptionPlans(supabase: any) {

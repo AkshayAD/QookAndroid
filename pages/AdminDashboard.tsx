@@ -25,6 +25,7 @@ import {
     Bell,
     Send
 } from 'lucide-react';
+import { FEATURE_DESCRIPTIONS } from '../lib/billing/featureAccess';
 
 interface User {
     user_id: string;
@@ -881,11 +882,12 @@ export default function AdminDashboard() {
                     enabled: !currentValue
                 });
                 if (result.success) {
+                    const persistedEnabled = result.data?.featureAccess?.enabled ?? !currentValue;
                     setFeatureMatrix(prev => ({
                         ...prev,
                         [featureId]: {
                             ...prev[featureId],
-                            [tierId]: !currentValue
+                            [tierId]: persistedEnabled
                         }
                     }));
                     setMessage({ type: 'success', text: result.data.message });
@@ -898,19 +900,9 @@ export default function AdminDashboard() {
             setSaving(null);
         }
 
-        const featureLabels: Record<string, string> = {
-            'single_regen': 'Single Meal Regeneration',
-            'smart_edit': 'AI Smart Edit',
-            'grocery_generation': 'Grocery List Generation',
-            'full_recipe_panel': 'Full Recipe Panel',
-            'nutrition_info': 'Nutrition Information',
-            'ingredient_add': 'Add Ingredients to Grocery',
-            'export_share': 'Export & Share',
-            'priority_support': 'Priority Support',
-            'family_mode': 'Family Mode',
-            'shared_grocery': 'Shared Grocery List',
-            'family_activity_log': 'Family Activity Log'
-        };
+        const featureLabels = Object.fromEntries(
+            Object.entries(FEATURE_DESCRIPTIONS).map(([feature, description]) => [feature, description.name])
+        );
 
         const tierOrder = ['free', 'basic', 'byok', 'pro', 'family_pro'];
         const sortedTiers = tiers.sort((a, b) => tierOrder.indexOf(a.id) - tierOrder.indexOf(b.id));
