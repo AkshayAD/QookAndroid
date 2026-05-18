@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qook Payment Audit - Issues Register</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell">
+      <p class="eyebrow">Payment audit report - issues register</p>
+      <h1>Required Changes and Risks</h1>
+      <p class="subtitle">Detailed issue list covering security, compliance, correctness, reliability, and production readiness. All items are recommendations only; no code changes were made in this audit pass.</p>
+      <nav class="nav" aria-label="Report navigation">
+        <a href="index.html">Summary</a>
+        <a href="issues.html">Issues Register</a>
+        <a href="change-plan.html">Change Plan</a>
+        <a href="test-matrix.html">Test Matrix</a>
+        <a href="optimizations.html">Optimizations</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel">
+      <h2>Severity Definition</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Severity</th>
+            <th>Meaning</th>
+            <th>Release stance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Can directly cause payment abuse, unauthorized credit use, duplicate grants, app-store rejection, or secret compromise.</td>
+            <td>Block production launch until fixed and tested.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1</span></td>
+            <td>High probability production incident, support burden, billing mismatch, or release quality failure.</td>
+            <td>Fix before public scale; may be sequenced after P0 lockdown.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2</span></td>
+            <td>Hardening, maintainability, UX, observability, or performance issue that raises operating cost.</td>
+            <td>Plan into next release wave once P0/P1 are closed.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>P0 - Production Blockers</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Issue</th>
+            <th>Evidence</th>
+            <th>Impact</th>
+            <th>Required Change</th>
+            <th>Acceptance Test</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge p0">P0-01</span></td>
+            <td>Android digital goods are sold through Razorpay Checkout JS without Google Play Billing implementation.</td>
+            <td>
+              <code>services/razorpayService.ts:168</code> loads checkout from <code>checkout.razorpay.com</code>.<br>
+              <code>android/app/build.gradle</code> has no BillingClient dependency or user choice billing implementation.
+            </td>
+            <td>Google Play distribution can be rejected or suspended if digital subscriptions/credits are sold outside allowed Play Billing or eligible alternative billing flows.</td>
+            <td>Decide distribution model. For Google Play: implement Play Billing for subscriptions/consumables or an eligible user choice billing flow with Billing Library support, reporting, purchase verification, and acknowledgement. For non-Play distribution: keep Razorpay but gate Android Play builds away from Razorpay digital checkout.</td>
+            <td>Internal Android build passes a purchase flow using BillingClient or documented user choice billing. Play Console policy review checklist is completed before release.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0-02</span></td>
+            <td>Credit pack amount tampering is possible because server trusts client amount and pack ID.</td>
+            <td>
+              <code>api/create-order.ts:9</code> accepts <code>amount_inr</code> and <code>pack_id</code> from client.<br>
+              <code>api/create-order.ts:30</code> sends that amount to Razorpay.<br>
+              <code>api/verify-payment.ts:62</code> passes client <code>plan_id</code> to the DB RPC.
+            </td>
+            <td>A caller can request a low amount order while passing a high-value pack ID. If paid, HMAC verification succeeds and the server can grant credits for the high-value pack.</td>
+            <td>Make backend authoritative. Client sends only <code>pack_id</code>. Server fetches active pack price/credits from Supabase, creates a pending payment row, stores Razorpay order ID, amount, currency, pack ID, and user ID, then verifies payment against the stored pending row and Razorpay order/payment status before granting credits.</td>
+            <td>Tamper test: create a request where client claims <code>pack_id=mega</code> with a lower amount. API must ignore client amount or reject. Verify endpoint must not grant credits unless order amount, currency, user, and pack match server-side state.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0-03</span></td>
+            <td>Subscription plan escalation is possible because server trusts client Razorpay plan and internal plan mapping.</td>
+            <td>
+              <code>api/create-subscription.ts:11</code> accepts Razorpay <code>plan_id</code> and <code>internal_plan_id</code> from client.<br>
+              <code>api/create-subscription.ts:68</code> uses client <code>plan_id</code> for the Razorpay subscription.<br>
+              <code>api/verify-payment.ts:62</code> grants internal plan from request body.
+            </td>
+            <td>A caller can create/pay for a cheaper Razorpay plan while asking the app to grant a higher internal plan until corrected later, if ever.</td>
+            <td>Client sends only internal plan ID and billing cycle. Server resolves Razorpay plan ID and any offer ID from trusted DB config. Store pending subscription intent. Verify and webhook handlers must resolve internal plan from stored server intent or provider plan details, never from client body.</td>
+            <td>Tamper test: pay for the cheapest subscription but submit <code>plan_id=family_pro</code> in verification. API must reject and no paid entitlement should be granted.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0-04</span></td>
+            <td>Payment routes do not require valid authentication; AI routes trust request body <code>userId</code>.</td>
+            <td>
+              <code>api/create-order.ts:17</code> and <code>api/create-subscription.ts:30</code> compare user IDs only when auth exists.<br>
+              <code>api/verify-payment.ts:21</code> requires payment fields but not auth.<br>
+              <code>api/ai-proxy.ts:83</code> and <code>api/ai-stream.ts:353</code> accept <code>userId</code> from body.
+            </td>
+            <td>Unauthenticated callers can create payment objects, verify against arbitrary user IDs, or target another user's AI credits and usage rows if they know or guess identifiers.</td>
+            <td>Every sensitive API route must require Supabase bearer token verification. Derive <code>user_id</code> from token, not request body. Reject missing token with 401 and mismatched user IDs with 403. AI routes must use authenticated user ID for credit queries and deduction.</td>
+            <td>API tests cover missing token, invalid token, and token/body mismatch for create order, create subscription, verify payment, cancel subscription, AI proxy, and AI stream.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0-05</span></td>
+            <td>Billing RLS policies allow client-side mutation of subscription and credit tables.</td>
+            <td>
+              <code>supabase/migrations/20260111_subscription_system.sql:244</code> creates <code>Users manage own subscription</code> for all operations.<br>
+              <code>supabase/migrations/20260111_subscription_system.sql:245</code> creates <code>Users manage own credits</code> for all operations.<br>
+              <code>supabase/migrations/20260111_subscription_system.sql:247</code> creates <code>Users manage own purchases</code> for all operations.
+            </td>
+            <td>With broad RLS, authenticated clients can potentially insert/update their own credits, subscriptions, purchases, and rate limits, bypassing payment rules.</td>
+            <td>Drop broad billing write policies. Keep SELECT policies for user-visible rows. Route writes through server-only APIs and locked-down SECURITY DEFINER RPCs. Grant execution only to trusted roles where appropriate. Add constraints to prevent negative balances and invalid plan states.</td>
+            <td>Client anon/auth session attempts to insert/update <code>user_credits</code>, <code>user_subscriptions</code>, and <code>credit_purchases</code> must fail. Server payment RPC tests still pass through service role.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0-06</span></td>
+            <td>Razorpay webhook handling is not production safe.</td>
+            <td>
+              <code>api/razorpay-webhook.ts:52</code> reconstructs body with <code>JSON.stringify(req.body)</code> when raw string is not present.<br>
+              <code>api/razorpay-webhook.ts:117</code> returns success after handling.<br>
+              <code>api/razorpay-webhook.ts:122</code> returns HTTP 200 even when processing throws.<br>
+              <code>api/razorpay-webhook.ts:222</code> updates credits without event-level idempotency.
+            </td>
+            <td>Signature verification can fail if raw payload changes. Provider retries can be suppressed by HTTP 200 on internal failure. Duplicate events or replayed webhook calls can grant duplicate credits.</td>
+            <td>Configure raw body capture for the webhook route. Verify <code>X-Razorpay-Signature</code> against raw bytes/string. Add a webhook event table keyed by Razorpay event ID. Return non-2xx on retryable processing failures. Deduplicate credit grants by payment/invoice/subscription cycle.</td>
+            <td>Webhook tests cover invalid signature, raw body validation, duplicate event, replayed recurring charge, and simulated DB failure returning retryable 5xx.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0-07</span></td>
+            <td>Payment secrets are committed in repository files.</td>
+            <td>
+              <code>scripts/setup-razorpay.js:4</code> contains a Razorpay test key ID.<br>
+              <code>scripts/setup-razorpay.js:5</code> contains a Razorpay test secret.<br>
+              <code>DEPLOYMENT_STATUS.md:71</code> contains an actual-looking webhook secret.
+            </td>
+            <td>Exposed secrets can enable webhook spoofing in any environment using that secret and create confusion between test and production credentials.</td>
+            <td>Rotate exposed Razorpay test secret and webhook secret. Remove secrets from files and history where required. Replace with placeholders. Add secret scanning to CI. Make setup scripts read from environment variables only.</td>
+            <td>Secret scanner passes. Old webhook secret no longer accepted in Razorpay dashboard or deployed app. Repository has no payment secrets beyond documented placeholders.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>P1 - High-Risk Gaps</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Issue</th>
+            <th>Evidence</th>
+            <th>Required Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge p1">P1-01</span></td>
+            <td>Service role key fallback can fail open into anon behavior.</td>
+            <td><code>api/verify-payment.ts:53</code> and <code>api/ai-proxy.ts:91</code> use <code>SUPABASE_SERVICE_ROLE_KEY || VITE_SUPABASE_ANON_KEY</code>.</td>
+            <td>Billing and AI credit write routes must fail closed if service role is missing. Never use anon fallback for privileged operations.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-02</span></td>
+            <td>Local release assets can be built with undefined Razorpay key.</td>
+            <td>Local Vite/Android assets contained <code>key:void 0</code> when <code>VITE_RAZORPAY_KEY_ID</code> was absent.</td>
+            <td>Add build-time environment validation for required frontend and backend variables. CI must fail before packaging if payment env is incomplete.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-03</span></td>
+            <td>Cancellation can remove paid access immediately despite user-facing cycle-end expectation.</td>
+            <td><code>api/cancel-subscription.ts:86</code> sets status <code>cancelled</code>. <code>services/subscriptionService.ts:905</code> also writes cancelled locally.</td>
+            <td>Represent cancellation as <code>cancel_at_period_end</code> or equivalent. Keep entitlement active until <code>renews_at/current_period_end</code>. Separate billing cancellation state from entitlement state.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-04</span></td>
+            <td>Credit deduction has race-condition risk.</td>
+            <td><code>api/ai-proxy.ts:300</code>, <code>api/ai-proxy.ts:320</code>, and <code>api/ai-stream.ts:440</code> update credits after reading balances.</td>
+            <td>Move credit consumption into a transactional DB RPC with row locks, idempotency keys, and negative-balance prevention.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-05</span></td>
+            <td>Payment-specific tests are missing.</td>
+            <td>Existing test suite passed, but no tests cover payment tampering, webhook retries, RLS billing mutation, auth rejection, or Android purchase flow.</td>
+            <td>Add route, RPC, and webhook tests before remediation is considered complete. Use Razorpay test mode fixtures for integration tests.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-06</span></td>
+            <td>Pricing sources and components can diverge.</td>
+            <td><code>components/PricingContent.tsx</code> and <code>components/PricingPage.tsx</code> both implement pricing displays. Docs and migrations show mixed price fields.</td>
+            <td>Use one pricing component and one server-side pricing source. Keep docs, DB rows, Razorpay plans, and UI in a reconciled release checklist.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-07</span></td>
+            <td>No complete billing ledger for audit, refund, and support workflows.</td>
+            <td><code>verify_razorpay_payment</code> writes <code>billing_payment_events</code>, but create/verify/webhook paths do not consistently store provider status, order fetch result, capture state, amount, currency, invoice, refund, and event payload.</td>
+            <td>Create a normalized billing ledger: payment intents, provider orders, subscription events, credit grants, refunds, webhook deliveries, and reconciliation state.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p1">P1-08</span></td>
+            <td>Rate limits and quota checks are partly client-side or bypassable.</td>
+            <td>Client services call rate-limit helpers, while server AI routes focus on credit checks and trust body user ID.</td>
+            <td>Enforce rate limits and abuse controls server-side using authenticated user ID and IP/device context. Return structured quota errors.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>P2 - Hardening and Quality Items</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Issue</th>
+            <th>Recommended Improvement</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge p2">P2-01</span></td>
+            <td>CORS is broad on sensitive API routes.</td>
+            <td>Restrict allowed origins for browser clients and keep strict bearer-token auth. Avoid <code>*</code> with credential semantics.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2-02</span></td>
+            <td>Payment UI can render an empty plan surface when Supabase env/config is missing.</td>
+            <td>Add explicit production-safe error states and telemetry for missing plan/pack config.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2-03</span></td>
+            <td>Brand name mismatch in Razorpay checkout.</td>
+            <td><code>services/razorpayService.ts:214</code> uses <code>Cook Commander</code>. Align checkout display name with Qook/QookCommander legal and support copy.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2-04</span></td>
+            <td>Payment logs may expose sensitive operational details.</td>
+            <td>Use structured logs with redaction. Do not log keys, signatures, full payloads, or full user identifiers in production logs.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2-05</span></td>
+            <td>Environment documentation is incomplete in <code>.env.example</code>.</td>
+            <td>Add required backend secrets and documented deployment scopes: Razorpay key secret, webhook secret, Supabase service role, Gemini key, allowed origins.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2-06</span></td>
+            <td>Payment script uses hardcoded test credentials.</td>
+            <td>Refactor setup utilities to read credentials from environment variables and print safe diagnostics only.</td>
+          </tr>
+          <tr>
+            <td><span class="badge p2">P2-07</span></td>
+            <td>TypeScript strict check is currently red.</td>
+            <td>Fix existing test type errors so CI can reliably block regressions before payment changes ship.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Generated as a report-only audit artifact. Product code changes are intentionally not included.</div>
+  </footer>
+</body>
+</html>

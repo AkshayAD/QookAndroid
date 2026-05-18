@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
+    canUseHostedNativeAuthFallback,
     getGoogleSignInMode,
     getGoogleSignInUnavailableMessage,
     openNativeGoogleAuthHandoff,
@@ -212,7 +213,7 @@ const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
                             return;
                         }
 
-                        if (shouldFallbackToHostedGoogleAuth(error)) {
+                        if (shouldFallbackToHostedGoogleAuth(error) && canUseHostedNativeAuthFallback()) {
                             try {
                                 await openNativeGoogleAuthHandoff(() => {
                                     setIsNativeLoading(false);

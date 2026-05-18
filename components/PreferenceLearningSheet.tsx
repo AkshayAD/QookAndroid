@@ -68,8 +68,8 @@ export default function PreferenceLearningSheet({
     const canApply = summary.signalIds.length > 0;
 
     return (
-        <div className="fixed inset-0 z-[75] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+        <div className="app-modal-frame z-[75] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="app-modal-surface bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
                 <div className="px-6 py-5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white flex items-start justify-between">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/70">Guided Learning</p>

@@ -276,8 +276,8 @@ export default function FamilyModeModal({ onClose, onFamilyStatusChange }: Famil
 
     if (loading) {
         return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl w-full max-w-lg p-8 flex items-center justify-center">
+            <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="app-modal-surface bg-white rounded-2xl w-full max-w-lg p-8 flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-2 border-orange-500 border-t-transparent"></div>
                 </div>
             </div>
@@ -287,8 +287,8 @@ export default function FamilyModeModal({ onClose, onFamilyStatusChange }: Famil
     // Not in a family - show creation/join options
     if (!familyGroup) {
         return (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
+            <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="app-modal-surface bg-white rounded-2xl w-full max-w-md shadow-xl overflow-hidden">
                     <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-orange-50 to-amber-50">
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-orange-100 rounded-lg">
@@ -382,8 +382,8 @@ export default function FamilyModeModal({ onClose, onFamilyStatusChange }: Famil
 
     // In a family - show management UI with activity log
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="app-modal-surface bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
                 {/* Header */}
                 <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-orange-50 to-amber-50 shrink-0">
                     <div className="flex items-center gap-3">

@@ -3,7 +3,6 @@ import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import { Browser } from '@capacitor/browser';
 import { Keyboard } from '@capacitor/keyboard';
-import { StatusBar, Style } from '@capacitor/status-bar';
 import { SplashScreen } from '@capacitor/splash-screen';
 
 // Platform detection helpers
@@ -98,16 +97,6 @@ export const initAndroidApp = async (): Promise<void> => {
     if (!isAndroid()) return;
 
     try {
-        // Status bar defaults come from Capacitor config.
-        // These runtime calls re-assert the same values on Android resume.
-        try {
-            await StatusBar.setStyle({ style: Style.Light }); // Light = dark icons
-            await StatusBar.setBackgroundColor({ color: '#ffffff' });
-            await StatusBar.setOverlaysWebView({ overlay: false });
-        } catch (e) {
-            console.log('[Android] StatusBar plugin not available:', e);
-        }
-
         // Hide splash screen after app is ready
         await SplashScreen.hide();
 

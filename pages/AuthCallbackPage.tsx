@@ -59,7 +59,7 @@ export default function AuthCallbackPage() {
     }, [finalizing, loading, navigate, user]);
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="app-safe-screen flex items-center justify-center bg-gray-50 px-4">
             <div className="text-center">
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm">
                     <Loader2 className="h-6 w-6 animate-spin text-orange-500" />

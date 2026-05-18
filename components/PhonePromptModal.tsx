@@ -110,8 +110,8 @@ export default function PhonePromptModal({ isOpen, onClose, onSuccess }: PhonePr
     }
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full shadow-xl">
+        <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="app-modal-surface bg-white rounded-2xl max-w-md w-full shadow-xl">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-orange-500 to-yellow-500 p-6 rounded-t-2xl text-white relative">
                     <button

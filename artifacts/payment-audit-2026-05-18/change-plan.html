@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qook Payment Audit - Change Plan</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell">
+      <p class="eyebrow">Payment audit report - non-executed remediation plan</p>
+      <h1>Detailed Change Plan</h1>
+      <p class="subtitle">Sequenced plan for turning the payment flow into a production-grade implementation. This file is intentionally a plan only; no implementation has been performed.</p>
+      <nav class="nav" aria-label="Report navigation">
+        <a href="index.html">Summary</a>
+        <a href="issues.html">Issues Register</a>
+        <a href="change-plan.html">Change Plan</a>
+        <a href="test-matrix.html">Test Matrix</a>
+        <a href="optimizations.html">Optimizations</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel">
+      <h2>Success Criteria</h2>
+      <div class="grid cols-3">
+        <div class="callout">
+          <strong>Payment correctness</strong><br>
+          Credits and subscriptions are granted only after provider-confirmed payment that matches server-side amount, currency, user, product, and idempotency state.
+        </div>
+        <div class="callout">
+          <strong>Security boundary</strong><br>
+          Clients can view billing state but cannot mutate billing records, grant credits, spoof users, or select trusted payment attributes.
+        </div>
+        <div class="callout">
+          <strong>Release readiness</strong><br>
+          Web, Android, Supabase, Razorpay, and Google Play policy flows are tested with repeatable automated checks and release gates.
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Target Payment Architecture</h2>
+      <div class="flow" aria-label="Target payment flow">
+        <div class="step">
+          <strong>Authenticated user</strong>
+          <span>Client sends bearer token and product ID only.</span>
+        </div>
+        <div class="step">
+          <strong>Server intent</strong>
+          <span>Server resolves price, currency, credits, plan, offer, and creates pending row.</span>
+        </div>
+        <div class="step">
+          <strong>Provider checkout</strong>
+          <span>Razorpay/Play Billing receives trusted server-created order or purchase product.</span>
+        </div>
+        <div class="step">
+          <strong>Verify and webhook</strong>
+          <span>Server verifies raw provider signals and stores idempotent event rows.</span>
+        </div>
+        <div class="step">
+          <strong>Ledger grant</strong>
+          <span>Transactional RPC grants entitlement once and creates audit trail.</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="timeline" style="margin-top: 16px;">
+      <article class="phase">
+        <div class="label"><span class="badge p0">Phase 0</span><br>Freeze and rotate</div>
+        <div>
+          <h3>Stop the bleeding before larger refactors</h3>
+          <ul class="compact-list">
+            <li>Rotate committed Razorpay test secret and webhook secret.</li>
+            <li>Remove hardcoded secrets from scripts/docs and replace with placeholders.</li>
+            <li>Add secret scanning to CI.</li>
+            <li>Disable or hide Android Razorpay digital checkout for Google Play builds until policy path is decided.</li>
+            <li>Add environment preflight checks that fail startup/build when payment secrets or public Razorpay key are missing.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> secret scanner passes, old webhook secret rejected, release build cannot produce undefined Razorpay key, and Android Play build has no non-compliant digital checkout.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p0">Phase 1</span><br>Auth boundary</div>
+        <div>
+          <h3>Require identity before any payment or credit action</h3>
+          <ul class="compact-list">
+            <li>Require Supabase bearer token on <code>create-order</code>, <code>create-subscription</code>, <code>verify-payment</code>, <code>cancel-subscription</code>, <code>ai-proxy</code>, and <code>ai-stream</code>.</li>
+            <li>Derive <code>user_id</code> from verified token. Remove body-supplied user identity as an authority.</li>
+            <li>Reject missing auth with 401 and mismatched user IDs with 403.</li>
+            <li>Fail closed if <code>SUPABASE_SERVICE_ROLE_KEY</code> is not configured for privileged server routes.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> route tests prove unauthenticated and mismatched-user requests cannot create orders, verify payments, cancel subscriptions, use credits, or mutate usage rows.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p0">Phase 2</span><br>Server-authoritative catalog</div>
+        <div>
+          <h3>Remove client control over trusted payment facts</h3>
+          <ul class="compact-list">
+            <li>For credit packs, accept only <code>pack_id</code>. Fetch active pack price, currency, and credits server-side.</li>
+            <li>For subscriptions, accept only internal plan ID and billing cycle. Fetch Razorpay plan ID, offer ID, price, and credits server-side.</li>
+            <li>Create a <code>payment_intents</code> or equivalent table that stores user, product, amount, currency, provider order/subscription ID, status, and expiry.</li>
+            <li>Store Razorpay notes that match server intent, but treat notes as audit support, not the source of truth.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> client tampering with amount, currency, plan ID, pack ID, offer ID, or user ID cannot change what the server creates or grants.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p0">Phase 3</span><br>Verification and ledger</div>
+        <div>
+          <h3>Grant exactly once, based on provider-confirmed facts</h3>
+          <ul class="compact-list">
+            <li>Use Razorpay signature verification with timing-safe comparison for checkout returns.</li>
+            <li>Fetch Razorpay order/payment/subscription from provider during verification when needed to confirm amount, currency, capture/payment status, and linked order/subscription.</li>
+            <li>Replace client-provided plan grant inputs with server-side pending intent lookup.</li>
+            <li>Create a durable billing ledger: intents, provider events, credit grants, refunds, subscription state changes, and reconciliation status.</li>
+            <li>Use unique constraints for provider payment ID, provider event ID, and credit grant idempotency key.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> duplicate verification and duplicate webhook delivery cannot double-grant; underpaid and mismatched-provider payments are rejected.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p0">Phase 4</span><br>Database hardening</div>
+        <div>
+          <h3>Make billing writes server-only</h3>
+          <ul class="compact-list">
+            <li>Drop broad <code>FOR ALL</code> RLS policies on billing tables.</li>
+            <li>Add user SELECT policies for own billing rows and optional admin SELECT/MANAGE policies.</li>
+            <li>Move credit grants and consumption into SECURITY DEFINER RPCs with fixed <code>search_path</code>, explicit validation, and narrow grants.</li>
+            <li>Add constraints for non-negative credits, known plan IDs, valid status values, and no duplicate active subscription rows.</li>
+            <li>Audit all client fallback paths that currently insert/update subscriptions or credits directly.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> Supabase tests prove authenticated client sessions cannot insert/update/delete billing tables directly, while server APIs still pass.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p0">Phase 5</span><br>Webhook rebuild</div>
+        <div>
+          <h3>Make provider callbacks reliable and replay-safe</h3>
+          <ul class="compact-list">
+            <li>Configure the webhook route to read raw request body before parsing.</li>
+            <li>Verify Razorpay signature from raw body and <code>X-Razorpay-Signature</code>.</li>
+            <li>Insert webhook delivery row first using provider event ID as a unique key.</li>
+            <li>Handle subscription activated, charged, completed, cancelled, halted, paused, and resumed events with explicit state transitions.</li>
+            <li>Return non-2xx on retryable internal errors. Return 2xx only after durable handling or known duplicate acknowledgement.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> duplicate, out-of-order, invalid-signature, and DB-failure webhook tests pass.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p1">Phase 6</span><br>Android payment path</div>
+        <div>
+          <h3>Choose and implement the distribution-safe Android flow</h3>
+          <ul class="compact-list">
+            <li>If shipping through Google Play, implement Play Billing products for subscriptions and credits, or a documented eligible alternative billing/user choice flow.</li>
+            <li>Add backend purchase-token verification and subscription status sync for Play purchases.</li>
+            <li>Keep Razorpay checkout available only for web or allowed non-Play channels, controlled by platform/build flags.</li>
+            <li>Add Android emulator/device tests for purchase entry points and entitlement sync.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> purchase flow passes on Android device/emulator and policy checklist is complete before Google Play release.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p1">Phase 7</span><br>Regression suite</div>
+        <div>
+          <h3>Make payment correctness enforceable</h3>
+          <ul class="compact-list">
+            <li>Add route tests for auth, tampering, idempotency, provider mismatch, and cancellation behavior.</li>
+            <li>Add Supabase/RPC tests for RLS and transactional credit grants/consumption.</li>
+            <li>Add webhook fixture tests based on Razorpay test payloads and signatures.</li>
+            <li>Add CI jobs: unit tests, TypeScript, lint, Vite build, Android assemble, Android lint, secret scan, and env validation.</li>
+            <li>Add release smoke checks for Razorpay test mode or Play test purchase flow.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> all payment-specific tests and release checks pass in CI before launch candidate tagging.</div>
+        </div>
+      </article>
+
+      <article class="phase">
+        <div class="label"><span class="badge p2">Phase 8</span><br>Operations</div>
+        <div>
+          <h3>Prepare for production support and reconciliation</h3>
+          <ul class="compact-list">
+            <li>Add structured logs with correlation IDs for intent ID, provider order ID, subscription ID, payment ID, and webhook event ID.</li>
+            <li>Add dashboards for payment success rate, webhook failures, duplicate deliveries, credit grants, and refund/cancel events.</li>
+            <li>Add daily reconciliation between Razorpay/Play and local billing ledger.</li>
+            <li>Create support tools for searching payments, replaying safe webhook events, and correcting entitlements with audit trails.</li>
+          </ul>
+          <div class="evidence"><strong>Gate:</strong> support can answer "who paid, what was granted, why, and when" from internal records without querying raw logs.</div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Generated as a report-only audit artifact. Product code changes are intentionally not included.</div>
+  </footer>
+</body>
+</html>

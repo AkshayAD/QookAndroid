@@ -29,11 +29,16 @@ import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
 @CapacitorPlugin(name = "NativeGoogleAuth")
 public class NativeGoogleAuthPlugin extends Plugin {
+    private static final char[] HEX = "0123456789abcdef".toCharArray();
+
     private CredentialManager credentialManager;
 
     private CredentialManager getCredentialManager() {
@@ -78,8 +83,10 @@ public class NativeGoogleAuthPlugin extends Plugin {
             return;
         }
 
+        String rawNonce = UUID.randomUUID().toString();
+        String hashedNonce = sha256Hex(rawNonce);
         GetSignInWithGoogleOption googleOption = new GetSignInWithGoogleOption.Builder(serverClientId)
-            .setNonce(UUID.randomUUID().toString())
+            .setNonce(hashedNonce)
             .build();
 
         GetCredentialRequest request = new GetCredentialRequest.Builder()
@@ -94,7 +101,7 @@ public class NativeGoogleAuthPlugin extends Plugin {
             new CredentialManagerCallback<GetCredentialResponse, GetCredentialException>() {
                 @Override
                 public void onResult(GetCredentialResponse result) {
-                    resolveGoogleCredential(call, result);
+                    resolveGoogleCredential(call, result, rawNonce);
                 }
 
                 @Override
@@ -105,7 +112,7 @@ public class NativeGoogleAuthPlugin extends Plugin {
         );
     }
 
-    private void resolveGoogleCredential(PluginCall call, GetCredentialResponse response) {
+    private void resolveGoogleCredential(PluginCall call, GetCredentialResponse response, String nonce) {
         Credential credential = response.getCredential();
         if (!(credential instanceof CustomCredential)) {
             call.reject("Google sign-in returned an unexpected credential type.", "FAILED");
@@ -128,6 +135,7 @@ public class NativeGoogleAuthPlugin extends Plugin {
 
             JSObject payload = new JSObject();
             payload.put("idToken", idToken);
+            payload.put("nonce", nonce);
             payload.put("email", googleCredential.getId());
             payload.put("name", googleCredential.getDisplayName());
             payload.put(
@@ -176,6 +184,24 @@ public class NativeGoogleAuthPlugin extends Plugin {
             || normalized.contains("not registered to use oauth")
             || normalized.contains("package name and sha-1")
             || normalized.contains("configuration error");
+    }
+
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            char[] chars = new char[bytes.length * 2];
+
+            for (int i = 0; i < bytes.length; i += 1) {
+                int value = bytes[i] & 0xFF;
+                chars[i * 2] = HEX[value >>> 4];
+                chars[(i * 2) + 1] = HEX[value & 0x0F];
+            }
+
+            return new String(chars);
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 is not available.", error);
+        }
     }
 
     @PluginMethod

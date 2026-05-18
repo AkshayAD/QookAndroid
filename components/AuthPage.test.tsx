@@ -3,6 +3,10 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AuthPage from './AuthPage';
 
+vi.mock('../lib/supabase', () => ({
+    isSupabaseConfigured: true,
+    supabase: {},
+}));
 vi.mock('./GoogleSignInButton', () => ({
     default: () => <button type="button">Continue with Google</button>,
 }));

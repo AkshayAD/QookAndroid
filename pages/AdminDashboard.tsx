@@ -1386,7 +1386,7 @@ export default function AdminDashboard() {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="app-safe-screen bg-gray-50">
             {/* Header */}
             <div className="bg-white border-b border-gray-200 px-6 py-4">
                 <div className="flex items-center justify-between">
@@ -1408,7 +1408,10 @@ export default function AdminDashboard() {
 
             <div className="flex">
                 {/* Sidebar */}
-                <div className="w-64 bg-white border-r border-gray-200 min-h-[calc(100vh-65px)]">
+                <div
+                    className="w-64 bg-white border-r border-gray-200"
+                    style={{ minHeight: 'calc(100dvh - var(--app-safe-top) - var(--app-safe-bottom) - 65px)' }}
+                >
                     <nav className="p-4 space-y-1">
                         {tabs.map(tab => (
                             <button

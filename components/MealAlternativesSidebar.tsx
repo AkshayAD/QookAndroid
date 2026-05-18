@@ -47,6 +47,7 @@ export default function MealAlternativesSidebar({
     isLoading = false,
     weeklyPlan
 }: MealAlternativesSidebarProps) {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
     const [mainTab, setMainTab] = useState<MainTab>('saved');
     const [mealTab, setMealTab] = useState<typeof MEAL_TABS[number]>('Lunch');
     const [slotPickerMeal, setSlotPickerMeal] = useState<string | null>(null);
@@ -137,14 +138,32 @@ export default function MealAlternativesSidebar({
         <>
             {/* Backdrop overlay - click to close */}
             <div
-                className="fixed inset-0 bg-black/20 z-40 backdrop-blur-sm"
+                className="fixed inset-0 z-40 bg-slate-900/35 backdrop-blur-[1px]"
                 onClick={onClose}
             />
 
-            {/* Sidebar drawer */}
-            <div className="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out border-l border-gray-100">
+            {isMobile ? (
+                <div className="mobile-sheet">
+                    <div className="flex justify-center py-2">
+                        <div className="h-1 w-10 rounded-full bg-gray-300" />
+                    </div>
+                    <div className="flex min-h-0 flex-1 flex-col">
+                        {renderContent()}
+                    </div>
+                </div>
+            ) : (
+                <div className="fixed inset-y-0 right-0 z-50 flex w-80 transform flex-col border-l border-gray-100 bg-white shadow-2xl transition-transform duration-300 ease-in-out">
+                    {renderContent()}
+                </div>
+            )}
+        </>
+    );
+
+    function renderContent() {
+        return (
+            <>
                 {/* Header */}
-                <div className="p-4 border-b flex justify-between items-center bg-gradient-to-r from-orange-500 to-red-600 text-white">
+                <div className="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-orange-500 to-red-600 p-4 text-white">
                     <div className="flex items-center gap-2">
                         <ChefHat className="w-5 h-5" />
                         <h2 className="font-bold text-lg">Quick Swaps</h2>
@@ -210,7 +229,7 @@ export default function MealAlternativesSidebar({
                     </div>
                 )}
 
-                <p className="text-xs text-gray-500 px-4 pt-2 pb-1">
+                <p className="px-4 pb-1 pt-2 text-xs text-gray-500">
                     {selectedMeal ? 'Click any meal to replace the selected slot.' : 'Select a meal slot first, then pick a replacement.'}
                 </p>
 
@@ -429,7 +448,7 @@ export default function MealAlternativesSidebar({
                     weeklyPlan={weeklyPlan || null}
                     selectedMealName={slotPickerMeal || ''}
                 />
-            </div>
-        </>
-    );
+            </>
+        );
+    }
 }

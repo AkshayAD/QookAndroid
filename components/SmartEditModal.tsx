@@ -183,8 +183,8 @@ const SmartEditModal: React.FC<Props> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="app-modal-frame bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div className="app-modal-surface bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 flex justify-between items-center text-white">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5" />

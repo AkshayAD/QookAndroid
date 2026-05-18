@@ -1,4 +1,4 @@
-{
+﻿{
   "project_info": {
     "project_number": "994727233073",
     "project_id": "qook-commander",
@@ -12,7 +12,32 @@
           "package_name": "in.qook.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "994727233073-041g0t6lmh1gjv6n8h4ff1umgrvmc1b5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.qook.app",
+            "certificate_hash": "681bfba1370d27e418470f98b06dd3424085798d"
+          }
+        },
+        {
+          "client_id": "994727233073-0nt7vicupuiih3h66hrn9fh545e592c9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.qook.app",
+            "certificate_hash": "3571237450d51f611898c6113783b791bdd09659"
+          }
+        },
+        {
+          "client_id": "994727233073-99ldcdp0i8aukgnnmsdus2dev74ig09s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.qook.app",
+            "certificate_hash": "709687058052b5126144061f9c510babfebe4f6f"
+          }
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBaTIJftFG5Zez8JWD7M4C0I-Vc-PUrtaA"

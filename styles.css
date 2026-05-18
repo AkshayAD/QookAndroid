@@ -3,16 +3,33 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100%;
+  }
+
   :root {
-    --app-safe-area-top: var(--native-safe-area-top, env(safe-area-inset-top, 0px));
-    --app-safe-area-bottom: var(--native-safe-area-bottom, env(safe-area-inset-bottom, 0px));
-    --mobile-bottom-nav-height: 72px;
-    --mobile-bottom-nav-offset: calc(var(--mobile-bottom-nav-height) + var(--app-safe-area-bottom));
+    --native-safe-area-top: env(safe-area-inset-top, 0px);
+    --native-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --native-safe-area-left: env(safe-area-inset-left, 0px);
+    --native-safe-area-right: env(safe-area-inset-right, 0px);
+    --app-safe-top: var(--native-safe-area-top);
+    --app-safe-bottom: var(--native-safe-area-bottom);
+    --app-safe-left: var(--native-safe-area-left);
+    --app-safe-right: var(--native-safe-area-right);
+    --app-top-chrome-height: 0px;
+    --app-bottom-chrome-height: 0px;
+    --app-content-top-offset: max(var(--app-top-chrome-height), var(--app-safe-top));
+    --app-content-bottom-offset: max(var(--app-bottom-chrome-height), var(--app-safe-bottom));
   }
 }
 
 @layer base {
   body {
+    min-height: 100%;
+    min-height: 100dvh;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background-color: #f8fafc;
     user-select: none;
@@ -30,30 +47,147 @@
 
 @layer utilities {
   .safe-area-inset-bottom {
-    padding-bottom: var(--app-safe-area-bottom);
+    padding-bottom: var(--app-safe-bottom);
   }
 
   .safe-area-inset-top {
-    padding-top: var(--app-safe-area-top);
+    padding-top: var(--app-safe-top);
   }
 
-  .mobile-nav-offset-bottom {
-    padding-bottom: var(--mobile-bottom-nav-offset);
+  .app-main-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    box-sizing: border-box;
+    padding-top: var(--app-content-top-offset);
+    padding-bottom: var(--app-content-bottom-offset);
+    padding-left: var(--app-safe-left);
+    padding-right: var(--app-safe-right);
   }
 
   .app-bottom-nav {
-    min-height: calc(var(--mobile-bottom-nav-height) + var(--app-safe-area-bottom));
-    padding-bottom: calc(var(--app-safe-area-bottom) + 0.5rem);
+    width: 100%;
+  }
+
+  .app-bottom-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .dashboard-shell {
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .dashboard-shell-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: calc(100vh - var(--app-top-chrome-height) - var(--app-bottom-chrome-height));
+    height: calc(100dvh - var(--app-top-chrome-height) - var(--app-bottom-chrome-height));
+    margin-top: var(--app-top-chrome-height);
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .dashboard-viewport {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-screen {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .dashboard-screen-width {
+    width: 100%;
+    max-width: 80rem;
+    margin-inline: auto;
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .dashboard-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 0.5rem 0.75rem 0.75rem;
+    padding-left: calc(var(--app-safe-left) + 0.75rem);
+    padding-right: calc(var(--app-safe-right) + 0.75rem);
+  }
+
+  .dashboard-scroll-tight {
+    padding: 0;
+    padding-bottom: 0.125rem;
+  }
+
+  .planner-sticky-panel {
+    isolation: isolate;
   }
 
   .min-h-dvh {
-    min-height: 100dvh;
     min-height: 100vh;
+    min-height: 100dvh;
   }
 
   .h-dvh {
-    height: 100dvh;
     height: 100vh;
+    height: 100dvh;
+  }
+
+  .app-content-screen {
+    min-height: calc(100vh - var(--app-content-top-offset) - var(--app-content-bottom-offset));
+    min-height: calc(100dvh - var(--app-content-top-offset) - var(--app-content-bottom-offset));
+  }
+
+  .app-safe-screen {
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+    padding-top: var(--app-safe-top);
+    padding-bottom: var(--app-safe-bottom);
+    padding-left: var(--app-safe-left);
+    padding-right: var(--app-safe-right);
+  }
+
+  .app-modal-frame {
+    position: fixed;
+    inset: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+    padding-top: var(--app-safe-top);
+    padding-bottom: var(--app-safe-bottom);
+    padding-left: var(--app-safe-left);
+    padding-right: var(--app-safe-right);
+  }
+
+  .app-modal-surface {
+    max-height: calc(100vh - var(--app-safe-top) - var(--app-safe-bottom) - 16px);
+    max-height: calc(100dvh - var(--app-safe-top) - var(--app-safe-bottom) - 16px);
+  }
+
+  .app-safe-sticky-top {
+    top: var(--app-safe-top);
+  }
+
+  .app-safe-sticky-bottom {
+    bottom: var(--app-safe-bottom);
   }
 
   .touch-scroll {
@@ -64,6 +198,37 @@
   .touch-target {
     min-height: 44px;
     min-width: 44px;
+  }
+
+  .mobile-sheet {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 50;
+    display: flex;
+    max-height: min(86dvh, calc(100dvh - var(--app-content-top-offset) - 20px));
+    flex-direction: column;
+    overflow: hidden;
+    border-top-left-radius: 1.5rem;
+    border-top-right-radius: 1.5rem;
+    background: white;
+    box-shadow: 0 -20px 50px -24px rgba(15, 23, 42, 0.42);
+    padding-bottom: var(--app-safe-bottom);
+  }
+}
+
+@layer utilities {
+  @media (min-width: 768px) {
+    .dashboard-scroll {
+      padding: 1.25rem;
+      padding-bottom: 1.25rem;
+      padding-left: calc(var(--app-safe-left) + 1.25rem);
+      padding-right: calc(var(--app-safe-right) + 1.25rem);
+    }
+
+    .dashboard-scroll-tight {
+      padding-bottom: 0;
+    }
   }
 }
 

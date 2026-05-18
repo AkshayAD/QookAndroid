@@ -24,8 +24,8 @@ const SaveConflictModal: React.FC<SaveConflictModalProps> = ({
     const dateRange = `${format(startDate, 'MMM d')} - ${format(addDays(startDate, 6), 'MMM d, yyyy')}`;
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="app-modal-surface bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
                 {/* Header */}
                 <div className="bg-amber-50 px-6 py-4 flex items-center justify-between border-b border-amber-100">
                     <div className="flex items-center gap-3">

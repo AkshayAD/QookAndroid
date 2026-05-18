@@ -14,7 +14,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSkipAuth }) => {
 
     if (!isSupabaseConfigured || !supabase) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
+            <div className="app-safe-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
                 <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
                     <div className="bg-amber-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
                         <AlertTriangle className="w-8 h-8 text-amber-600" />
@@ -41,7 +41,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onSkipAuth }) => {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
+        <div className="app-safe-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
                 <div className="flex items-center justify-center gap-3 mb-8">
                     <div className="bg-orange-500 p-3 rounded-xl shadow-lg shadow-orange-200">

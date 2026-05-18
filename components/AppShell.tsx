@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Mail, ChefHat, ShoppingCart, RefreshCw, Home, CreditCard, LogOut, User, Sparkles, Shield, Settings, Users } from 'lucide-react';
 import { useIsAdmin } from './AdminRoute';
@@ -7,6 +7,8 @@ import FamilyModeToggle from './FamilyModeToggle';
 import GoogleSignInButton from './GoogleSignInButton';
 import { useAuth } from '../contexts/AuthContext';
 import { useSubscription } from '../contexts/SubscriptionContext';
+import { APP_CHROME_VARS } from '../lib/appChrome';
+import { useMeasuredChromeVar, useNativeSafeAreaInsets } from '../hooks/useAppChrome';
 
 const SettingsModal = lazy(() => import('./SettingsModal'));
 
@@ -38,6 +40,10 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isFamilyModeOpen, setIsFamilyModeOpen] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const topChromeRef = useRef<HTMLDivElement | null>(null);
+
+    useNativeSafeAreaInsets();
+    useMeasuredChromeVar(topChromeRef, APP_CHROME_VARS.topChromeHeight);
 
     // Listen for auth trigger from child components
     useEffect(() => {
@@ -94,32 +100,32 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
     };
 
     return (
-        <div className="min-h-screen bg-white text-gray-900 font-sans flex flex-col">
-            {/* Launch Offer Banner - Fixed Marquee clickable */}
-            {!user && (
-                <button
-                    onClick={() => setIsAuthModalOpen(true)}
-                    className="fixed top-0 left-0 right-0 z-[60] w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-2 px-4 text-sm font-medium overflow-hidden hover:from-green-600 hover:to-emerald-600 transition-all cursor-pointer safe-area-inset-top"
-                >
-                    <div className="animate-marquee whitespace-nowrap">
-                        🚀 LAUNCH OFFER: Get Basic Plan FREE for your first month! Click to Start Free → &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 🚀 LAUNCH OFFER: Get Basic Plan FREE for your first month! Click to Start Free →
-                    </div>
-                </button>
-            )}
+        <div className={`${mode === 'dashboard' ? 'dashboard-shell' : 'min-h-screen'} bg-white text-gray-900 font-sans flex flex-col`}>
+            <div ref={topChromeRef} className="fixed inset-x-0 top-0 z-50">
+                {/* Launch Offer Banner */}
+                {!user && (
+                    <button
+                        onClick={() => setIsAuthModalOpen(true)}
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-2 px-4 text-sm font-medium overflow-hidden hover:from-green-600 hover:to-emerald-600 transition-all cursor-pointer safe-area-inset-top"
+                    >
+                        <div className="animate-marquee whitespace-nowrap">
+                            🚀 LAUNCH OFFER: Get Basic Plan FREE for your first month! Click to Start Free → &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 🚀 LAUNCH OFFER: Get Basic Plan FREE for your first month! Click to Start Free →
+                        </div>
+                    </button>
+                )}
 
-            {/* Unified Navigation Header */}
-            <nav
-                className={`fixed w-full bg-white/95 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm ${user ? 'safe-area-inset-top' : ''}`}
-                style={{ top: user ? 0 : 'calc(36px + env(safe-area-inset-top))' }}
-            >
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-16">
+                {/* Unified Navigation Header */}
+                <nav
+                    className={`w-full border-b border-gray-200 bg-white shadow-[0_1px_0_rgba(15,23,42,0.04)] md:bg-white/95 md:backdrop-blur-xl ${user ? 'safe-area-inset-top' : ''}`}
+                >
+                    <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+                        <div className="flex justify-between items-center h-[44px] md:h-16">
                         {/* Logo */}
                         <a href="https://qook.in" className="flex items-center gap-2 shrink-0">
                             <img
                                 src={`${import.meta.env.BASE_URL}QookCommander-home-cook-management-app-logo.png`}
                                 alt="QookCommander"
-                                className="h-8 w-auto"
+                                className="h-[18px] md:h-8 w-auto"
                             />
                         </a>
 
@@ -273,7 +279,7 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
                         </div>
 
                         {/* Mobile User Controls (no hamburger menu) */}
-                        <div className="md:hidden flex items-center gap-2">
+                        <div className="md:hidden flex items-center gap-1.5">
                             {user ? (
                                 <>
                                     {/* Family/Personal Toggle - Mobile */}
@@ -281,22 +287,27 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
                                         <FamilyModeToggle compact />
                                     )}
                                     {/* Mobile Credits Badge */}
-                                    <div className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-1 rounded-full text-xs font-semibold">
+                                    <div className="flex items-center gap-1 rounded-full border border-orange-100 bg-orange-50 px-2 py-[3px] text-[10px] font-semibold text-orange-700">
                                         <Sparkles className="w-3 h-3" />
                                         <span>{totalCredits}</span>
                                     </div>
                                     {/* Plan Badge + Avatar - links to dashboard */}
-                                    <Link to="/dashboard" className="flex items-center gap-1.5">
-                                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${getPlanBadge().color}`}>
-                                            {getPlanBadge().label}
-                                        </span>
-                                        {/* Hide avatar in dashboard mode - show on home/public only */}
-                                        {mode !== 'dashboard' && (
+                                    {mode === 'dashboard' ? (
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`rounded-full px-2 py-[3px] text-[9px] font-semibold uppercase tracking-[0.12em] ${getPlanBadge().color}`}>
+                                                {getPlanBadge().label}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <Link to="/dashboard" className="flex items-center gap-1.5">
+                                            <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${getPlanBadge().color}`}>
+                                                {getPlanBadge().label}
+                                            </span>
                                             <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-red-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
                                                 {user.email?.charAt(0).toUpperCase()}
                                             </div>
-                                        )}
-                                    </Link>
+                                        </Link>
+                                    )}
                                 </>
                             ) : (
                                 <button
@@ -307,12 +318,15 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
                                 </button>
                             )}
                         </div>
+                        </div>
                     </div>
-                </div>
-            </nav>
+                </nav>
+            </div>
 
             {/* Main Content */}
-            <main className={`flex-grow ${user ? 'pt-[calc(4rem+env(safe-area-inset-top))]' : 'pt-[calc(100px+env(safe-area-inset-top))]'}`}>
+            <main
+                className={mode === 'dashboard' ? 'dashboard-shell-main' : 'app-main-shell'}
+            >
                 {children}
             </main>
 

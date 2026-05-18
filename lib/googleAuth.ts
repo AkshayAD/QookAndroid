@@ -7,7 +7,7 @@ const WEB_GOOGLE_ORIGINS = new Set([
     'https://qook.in',
 ]);
 const CANONICAL_QOOK_AUTH_ORIGIN = 'https://www.qook.in';
-const PRODUCTION_QOOK_GOOGLE_CLIENT_ID = '399705277846-3d4lf1gucl4iumremffpkca9ali94rru.apps.googleusercontent.com';
+const PRODUCTION_QOOK_GOOGLE_CLIENT_ID = '994727233073-mt03vmvtri5f0ivvfpee66r4ug88fkps.apps.googleusercontent.com';
 
 // Google OAuth client IDs are public identifiers. Keep a production default so
 // Android release builds cannot silently lose native Google sign-in when local
@@ -48,6 +48,10 @@ export const getNativeGoogleAuthUrl = (): string => buildNativeGoogleAuthUrl();
 
 export const resolvePostAuthDestination = (isAuthenticated: boolean): string => (
     isAuthenticated ? WEB_POST_AUTH_PATH : '/'
+);
+
+export const canUseHostedNativeAuthFallback = (env: ImportMetaEnv = import.meta.env): boolean => (
+    env.DEV === true && env.VITE_ANDROID_WEB_AUTH_FALLBACK === 'true'
 );
 
 export const isSupportedGoogleWebOrigin = (origin?: string): boolean => {
@@ -107,7 +111,7 @@ export async function openNativeGoogleAuthHandoff(onBrowserFinished?: () => void
 
 export async function signInWithNativeGoogleIdToken(): Promise<void> {
     const result = await signInWithNativeGoogle(googleWebClientId);
-    await signInWithGoogleIdToken(result.idToken);
+    await signInWithGoogleIdToken(result.idToken, result.nonce);
 }
 
 export async function signInWithGoogleIdToken(token: string, nonce?: string): Promise<void> {

@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 
 type NativeGoogleSignInResult = {
     idToken: string;
+    nonce?: string;
     email?: string;
     name?: string;
     photoUrl?: string | null;

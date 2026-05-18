@@ -52,7 +52,7 @@ export default function NativeAuthPage() {
     }, [completeNativeHandoff]);
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center px-4 py-10">
+        <div className="app-safe-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 flex items-center justify-center px-4 py-10">
             <div className="w-full max-w-md rounded-3xl bg-white shadow-2xl border border-orange-100 p-8">
                 <div className="text-center">
                     <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500 shadow-lg shadow-orange-200">

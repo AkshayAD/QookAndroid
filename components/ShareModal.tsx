@@ -19,9 +19,10 @@ interface ShareModalProps {
     data: WeeklyPlan | GroceryItem[];
     dateRange: string;
     sourceLanguage?: 'English' | 'Hindi'; // Language the data was generated in
+    familyGroupId?: string | null;
 }
 
-const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, dateRange, sourceLanguage }) => {
+const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, dateRange, sourceLanguage, familyGroupId }) => {
     const [loading, setLoading] = useState(false);
     const [translating, setTranslating] = useState(false);
     const [isTranslated, setIsTranslated] = useState(false);
@@ -106,7 +107,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, da
             // Use Proxy for Translation (Charged)
             if (type === 'plan') {
                 const planData = data as WeeklyPlan;
-                const translated = await translateViaProxy(userId, planData, targetLanguage, 'plan', apiKey);
+                const translated = await translateViaProxy(userId, planData, targetLanguage, 'plan', familyGroupId, apiKey || undefined);
                 setTranslatedData({ days: translated.days });
             } else {
                 const groceryData = data as GroceryItem[];
@@ -116,7 +117,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, da
                     category: item.category,
                     checked: item.checked
                 }));
-                const translated = await translateViaProxy(userId, itemsForTranslation, targetLanguage, 'grocery', apiKey);
+                const translated = await translateViaProxy(userId, itemsForTranslation, targetLanguage, 'grocery', familyGroupId, apiKey || undefined);
                 // Map back to GroceryItems
                 setTranslatedData(translated.map((t: any, i: number) => ({
                     ...groceryData[i],
@@ -132,7 +133,7 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, da
         } finally {
             setTranslating(false);
         }
-    }, [isTranslated, apiKey, type, data, originalLanguage, userId]);
+    }, [isTranslated, apiKey, type, data, originalLanguage, userId, familyGroupId]);
 
     if (!isOpen) return null;
 
@@ -482,11 +483,8 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, da
             </div>
 
             {/* Visible Modal */}
-            <div
-                className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm"
-                style={{ minHeight: '100dvh' }}
-            >
-                <div className="bg-white rounded-2xl w-full max-w-lg sm:max-w-2xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[90vh]">
+            <div className="app-modal-frame bg-black/80 flex items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm">
+                <div className="app-modal-surface bg-white rounded-2xl w-full max-w-lg sm:max-w-2xl shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[90vh]">
 
                     {/* Header with Close Button */}
                     <div className="p-3 sm:p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-2xl shrink-0">
@@ -500,20 +498,17 @@ const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, type, data, da
                             <button
                                 onClick={handleLanguageToggle}
                                 disabled={translating}
+                                aria-label={isTranslated ? 'Show original language' : (originalLanguage === 'hi' ? 'Translate to English' : 'Translate to Hindi')}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${translating
                                     ? 'bg-gray-100 text-gray-400 cursor-wait'
                                     : isTranslated
                                         ? 'bg-orange-100 text-orange-700 border border-orange-200'
-                                        : !apiKey
-                                            ? 'bg-red-50 text-red-500 border border-red-200'
-                                            : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                                        : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
                                     }`}
-                                title={!apiKey ? 'API key required for translation' : ''}
+                                title={isTranslated ? 'Show original language' : (originalLanguage === 'hi' ? 'Translate to English' : 'Translate to Hindi')}
                             >
                                 {translating ? (
                                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : !apiKey ? (
-                                    <AlertCircle className="w-3.5 h-3.5" />
                                 ) : (
                                     <Globe className="w-3.5 h-3.5" />
                                 )}

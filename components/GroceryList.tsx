@@ -421,7 +421,7 @@ const GroceryList: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="p-4 space-y-6 max-h-[600px] overflow-y-auto">
+          <div className="p-4 space-y-6">
             {categories.map((category) => (
               <div key={category}>
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{category}</h3>

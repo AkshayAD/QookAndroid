@@ -182,7 +182,7 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
     const selectedPlan = selectedDate && !isMultiSelectMode ? getDayPlan(selectedDate) : null;
 
     return (
-        <div className="grid lg:grid-cols-3 gap-4 lg:gap-6 lg:h-full small-screen-zoom">
+        <div className="grid lg:grid-cols-3 gap-4 lg:gap-6 small-screen-zoom">
             <style>{`
                 @media (max-width: 350px) {
                     .small-screen-zoom {
@@ -421,7 +421,7 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
             </div>
 
             {/* Day Detail Sidebar - Inline on mobile, sidebar on desktop */}
-            <div className={`lg:col-span-1 bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-gray-200 flex flex-col max-h-[60vh] lg:max-h-none overflow-y-auto ${!selectedDate && !isMultiSelectMode ? 'hidden lg:flex' : ''}`}>
+            <div className={`lg:col-span-1 bg-white sm:rounded-2xl sm:shadow-sm sm:border sm:border-gray-200 flex flex-col ${!selectedDate && !isMultiSelectMode ? 'hidden lg:flex' : ''}`}>
                 {isMultiSelectMode ? (
                     // Multi-select mode sidebar
                     <>
@@ -436,7 +436,7 @@ const CalendarView: React.FC<Props> = ({ schedule, onInitiateTransfer, onGenerat
                             </p>
                         </div>
 
-                        <div className="p-4 flex-1 overflow-y-auto space-y-4">
+                        <div className="p-4 space-y-4 lg:flex-1 lg:overflow-y-auto">
                             <div className="text-center py-8">
                                 <ShoppingCart className="w-12 h-12 text-green-200 mx-auto mb-3" />
                                 <p className="text-sm text-gray-600 mb-2">Ready to generate grocery list for selected days?</p>

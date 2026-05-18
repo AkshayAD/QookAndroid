@@ -97,8 +97,8 @@ export default function OnboardingModal({ onComplete, isMobile = false }: Onboar
     // Mobile Bottom Sheet Style
     if (isMobile) {
         return (
-            <div className={`fixed inset-0 z-[100] flex items-end justify-center bg-black/50 transition-opacity duration-300 ${isExiting ? 'opacity-0' : 'opacity-100'}`}>
-                <div className={`bg-white w-full max-h-[80vh] rounded-t-3xl shadow-2xl overflow-hidden transform transition-transform duration-300 ${isExiting ? 'translate-y-full' : 'translate-y-0'}`}>
+            <div className={`app-modal-frame z-[100] flex items-end justify-center bg-black/50 transition-opacity duration-300 ${isExiting ? 'opacity-0' : 'opacity-100'}`}>
+                <div className={`app-modal-surface bg-white w-full max-h-[80vh] rounded-t-3xl shadow-2xl overflow-hidden transform transition-transform duration-300 ${isExiting ? 'translate-y-full' : 'translate-y-0'}`}>
                     {/* Handle */}
                     <div className="flex justify-center pt-3 pb-2">
                         <div className="w-10 h-1 bg-gray-300 rounded-full" />
@@ -170,8 +170,8 @@ export default function OnboardingModal({ onComplete, isMobile = false }: Onboar
 
     // Desktop Modal Style
     return (
-        <div className={`fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isExiting ? 'opacity-0' : 'opacity-100'}`}>
-            <div className={`bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 ${isExiting ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`}>
+        <div className={`app-modal-frame z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm transition-opacity duration-300 ${isExiting ? 'opacity-0' : 'opacity-100'}`}>
+            <div className={`app-modal-surface bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all duration-300 ${isExiting ? 'scale-95 opacity-0' : 'scale-100 opacity-100'}`}>
                 {/* Header with gradient */}
                 <div className="bg-gradient-to-r from-orange-500 to-red-600 p-8 text-white text-center relative overflow-hidden">
                     <div className="absolute inset-0 opacity-20">

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qook Payment Audit - Optimization Possibilities</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell">
+      <p class="eyebrow">Payment audit report - optimization backlog</p>
+      <h1>Optimization Possibilities</h1>
+      <p class="subtitle">Improvements to reduce payment friction, support load, operational risk, and long-term maintenance cost after the P0 and P1 issues are handled.</p>
+      <nav class="nav" aria-label="Report navigation">
+        <a href="index.html">Summary</a>
+        <a href="issues.html">Issues Register</a>
+        <a href="change-plan.html">Change Plan</a>
+        <a href="test-matrix.html">Test Matrix</a>
+        <a href="optimizations.html">Optimizations</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="grid cols-3">
+      <article class="panel metric">
+        <span class="number" style="color: var(--accent)">6</span>
+        <span class="label">Security and fraud improvements</span>
+      </article>
+      <article class="panel metric">
+        <span class="number" style="color: var(--p2)">7</span>
+        <span class="label">UX and conversion improvements</span>
+      </article>
+      <article class="panel metric">
+        <span class="number" style="color: var(--ok)">8</span>
+        <span class="label">Ops and maintainability improvements</span>
+      </article>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Security and Fraud Optimization</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Opportunity</th>
+            <th>Benefit</th>
+            <th>Implementation Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Payment intent expiry and single-use state</td>
+            <td>Prevents stale or reused checkout results from granting benefits later.</td>
+            <td>Set short expiry on pending intents. Move states through <code>created</code>, <code>paid</code>, <code>granted</code>, <code>expired</code>, <code>refunded</code>.</td>
+          </tr>
+          <tr>
+            <td>Provider fetch before grant</td>
+            <td>Reduces trust in client callback payloads and catches partial/cancelled payments.</td>
+            <td>Fetch Razorpay payment/order/subscription during verification and compare amount, currency, status, and linked IDs.</td>
+          </tr>
+          <tr>
+            <td>Fraud velocity checks</td>
+            <td>Flags abuse patterns such as repeated low-value orders, verify attempts, and failed webhook signatures.</td>
+            <td>Track attempts by user, IP, device fingerprint, product, and provider object ID.</td>
+          </tr>
+          <tr>
+            <td>Admin-only entitlement correction workflow</td>
+            <td>Prevents manual support fixes from becoming untracked data edits.</td>
+            <td>Corrections should require reason, actor, before/after, source ticket, and immutable audit event.</td>
+          </tr>
+          <tr>
+            <td>Replay protection for checkout callback</td>
+            <td>Keeps browser callback retries from generating inconsistent UI or duplicate records.</td>
+            <td>Use server idempotency keys and return the canonical final payment state to the client.</td>
+          </tr>
+          <tr>
+            <td>Strict environment separation</td>
+            <td>Prevents test keys, live keys, preview builds, and production DB from mixing.</td>
+            <td>Validate key prefixes and deployment environment. Block <code>rzp_test_</code> in production and live keys outside production.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Reliability and Reconciliation</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Opportunity</th>
+            <th>Benefit</th>
+            <th>Implementation Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Daily provider reconciliation job</td>
+            <td>Catches missed webhooks, failed grants, refunds, cancellations, and subscription renewals.</td>
+            <td>Compare Razorpay/Play provider records with local ledger by day and subscription cycle. Produce actionable discrepancy rows.</td>
+          </tr>
+          <tr>
+            <td>Webhook replay tool</td>
+            <td>Speeds up safe recovery from transient DB or deploy failures.</td>
+            <td>Replay only stored verified raw events or provider-fetched events. Make replay idempotent and auditable.</td>
+          </tr>
+          <tr>
+            <td>Payment state machine</td>
+            <td>Makes edge cases explicit and prevents impossible status transitions.</td>
+            <td>Define allowed transitions for order, subscription, credit grant, refund, chargeback, and cancellation states.</td>
+          </tr>
+          <tr>
+            <td>Provider outage mode</td>
+            <td>Improves user experience when Razorpay or Play Billing is degraded.</td>
+            <td>Show a payment-unavailable state and avoid creating partial local intents when provider calls fail.</td>
+          </tr>
+          <tr>
+            <td>Structured correlation IDs</td>
+            <td>Allows support and engineering to trace one payment across browser, API, DB, webhook, and provider.</td>
+            <td>Log intent ID, provider order ID, provider payment ID, subscription ID, user ID hash, and request ID.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>User Experience and Conversion</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Opportunity</th>
+            <th>Benefit</th>
+            <th>Implementation Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Unified pricing component</td>
+            <td>Reduces pricing drift and user confusion.</td>
+            <td>Replace duplicate pricing surfaces with one component backed by one normalized view model.</td>
+          </tr>
+          <tr>
+            <td>Server-backed checkout preview</td>
+            <td>Shows exactly what the server will charge before opening checkout.</td>
+            <td>Display product, amount, discount, renewal amount, taxes if any, and credit grant based on server intent response.</td>
+          </tr>
+          <tr>
+            <td>Clear success and pending states</td>
+            <td>Prevents repeated payment clicks when confirmation is delayed.</td>
+            <td>After checkout callback, show verifying, granted, pending webhook, failed, or support-needed states from server status.</td>
+          </tr>
+          <tr>
+            <td>Cancellation clarity</td>
+            <td>Reduces support tickets and charge disputes.</td>
+            <td>Show current period end, renewal disabled state, access-through date, and reactivation path.</td>
+          </tr>
+          <tr>
+            <td>Receipt and support links</td>
+            <td>Helps users self-serve payment questions.</td>
+            <td>Add receipt/invoice link, payment ID, plan name, and support contact after successful payment.</td>
+          </tr>
+          <tr>
+            <td>Localized payment copy</td>
+            <td>Improves trust for Indian payment methods and first-month offers.</td>
+            <td>Use consistent Rs pricing, renewal language, GST/tax copy if applicable, and provider method availability.</td>
+          </tr>
+          <tr>
+            <td>Android-specific payment messaging</td>
+            <td>Avoids showing web-only Razorpay copy in Play Billing builds.</td>
+            <td>Render payment provider, cancellation, and support copy based on platform and distribution channel.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Performance and Frontend Quality</h2>
+      <div class="grid cols-2">
+        <div>
+          <h3>Checkout Load</h3>
+          <ul class="compact-list">
+            <li>Lazy-load Razorpay only when the user initiates payment, which is already the current direction.</li>
+            <li>Add timeout and retry messaging around checkout SDK load failure.</li>
+            <li>Prefetch pricing data after login but avoid blocking the main dashboard on payment config.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Bundle and UI</h3>
+          <ul class="compact-list">
+            <li>Remove duplicate pricing page implementation after choosing the canonical component.</li>
+            <li>Keep payment route chunks isolated from core meal-planning route chunks.</li>
+            <li>Add resilient empty/error states when plan or pack rows are missing.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Database and Query Optimization</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Optimization</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Indexes</td>
+            <td>Add or verify indexes on <code>user_id</code>, provider payment/order/subscription IDs, event IDs, active status, and created timestamps.</td>
+            <td>Payment support, reconciliation, and webhook processing depend on quick lookups.</td>
+          </tr>
+          <tr>
+            <td>Constraints</td>
+            <td>Add unique constraints for provider event ID, payment ID, order ID, and credit grant idempotency key.</td>
+            <td>Database should enforce duplicate prevention even if application code has a bug.</td>
+          </tr>
+          <tr>
+            <td>RPCs</td>
+            <td>Use transaction-safe RPCs for grant and consume operations.</td>
+            <td>Centralizes credit accounting and prevents race conditions.</td>
+          </tr>
+          <tr>
+            <td>Archiving</td>
+            <td>Partition or archive old webhook payloads and usage rows if volume grows.</td>
+            <td>Keeps operational tables responsive without losing audit history.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Observability Dashboard Ideas</h2>
+      <div class="grid cols-3">
+        <div class="callout">
+          <strong>Payment health</strong><br>
+          Checkout starts, provider order creation success, payment success, verification failure, and average verification latency.
+        </div>
+        <div class="callout">
+          <strong>Webhook health</strong><br>
+          Delivery count, invalid signatures, processing failures, duplicate events, retry age, and unprocessed backlog.
+        </div>
+        <div class="callout">
+          <strong>Credit health</strong><br>
+          Credits granted, credits consumed, negative-balance prevention events, duplicate grant attempts, and top grant reasons.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Generated as a report-only audit artifact. Product code changes are intentionally not included.</div>
+  </footer>
+</body>
+</html>

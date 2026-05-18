@@ -5,9 +5,5 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- Status bar: dark icons on white background (API 23+) -->
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">@android:color/white</item>
-        <item name="android:windowTranslucentStatus">false</item>
     </style>
 </resources>

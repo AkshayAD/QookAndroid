@@ -114,10 +114,13 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, initial
     const progressPercent = currentStep === 0 ? 0 : Math.round((currentStep / (totalSteps - 1)) * 100);
 
     return (
-        <div className="min-h-dvh bg-gradient-to-br from-orange-50 via-white to-amber-50 flex flex-col">
+        <div
+            className="app-content-screen min-h-0 overflow-hidden bg-gradient-to-br from-orange-50 via-white to-amber-50 flex flex-col"
+            style={{ height: 'calc(100dvh - var(--app-content-top-offset) - var(--app-content-bottom-offset))' }}
+        >
             {/* Header with Progress */}
             {currentStep > 0 && (
-                <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
+                <div className="shrink-0 sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
                     <div className="max-w-lg mx-auto">
                         {/* Skip button for re-runs */}
                         {onSkip && (
@@ -151,8 +154,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, initial
             )}
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
-                <div className="w-full max-w-lg">
+            <div className="flex-1 min-h-0 overflow-y-auto touch-scroll px-4 py-6">
+                <div className={`mx-auto flex min-h-full w-full max-w-lg flex-col ${currentStep === 0 ? 'justify-center' : 'justify-start'}`}>
                     {/* Step Content with animation */}
                     <div className="animate-in fade-in slide-in-from-right-4 duration-300">
                         {CurrentStepComponent && (
@@ -169,7 +172,10 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete, initial
 
             {/* Footer Navigation (not on welcome) */}
             {currentStep > 0 && (
-                <div className="sticky bottom-0 bg-white/80 backdrop-blur-sm border-t border-gray-100 px-4 py-4 safe-area-inset-bottom">
+                <div
+                    className="shrink-0 sticky bottom-0 bg-white/80 backdrop-blur-sm border-t border-gray-100 px-4 py-4"
+                    style={{ paddingBottom: 'calc(var(--app-safe-bottom) + 1rem)' }}
+                >
                     <div className="max-w-lg mx-auto flex gap-3">
                         {/* Back Button */}
                         {!isFirstStep && (

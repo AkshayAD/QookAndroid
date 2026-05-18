@@ -181,8 +181,8 @@ export default function SettingsModal({
     );
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4" style={{ minHeight: '100dvh' }}>
-            <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden max-h-[95vh] sm:max-h-[90vh] flex flex-col">
+        <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="app-modal-surface bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden max-h-[95vh] sm:max-h-[90vh] flex flex-col">
                 {/* Header */}
                 <div className="p-4 sm:p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-indigo-50 to-purple-50 shrink-0">
                     <h3 className="font-bold text-gray-800 flex items-center gap-2 text-lg">

@@ -1,35 +1,82 @@
-
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Bell,
+  Check,
+  ChevronDown,
+  CloudSun,
+  Lock,
+  MessageSquarePlus,
+  Moon,
+  MoreHorizontal,
+  Pencil,
+  PlayCircle,
+  RefreshCw,
+  Shuffle,
+  Sun,
+  Users,
+  X,
+} from 'lucide-react';
 import { DayPlan } from '../types';
-import { RefreshCw, Sun, CloudSun, Moon, MessageSquarePlus, Pencil, Check, X, Trash2, Bell, Users, PlayCircle, Lock, Shuffle } from 'lucide-react';
 import MealList from './MealList';
 import { useFamily } from '../contexts/FamilyContext';
 import { useFeatureGate, Feature } from '../hooks/useFeatureGate';
 import FeatureGateModal from './FeatureGateModal';
 
+type MealType = 'breakfast' | 'lunch' | 'dinner';
+
 interface Props {
   dayPlan: DayPlan;
   dayIndex: number;
-  enabledMeals?: Array<'breakfast' | 'lunch' | 'dinner'>;
-  onRegenerate: (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner') => void;
+  enabledMeals?: MealType[];
+  onRegenerate: (dayIndex: number, mealType: MealType) => void;
   onSmartEdit: (dayPlan: DayPlan, dayIndex: number) => void;
-  onMealUpdate?: (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner', newValue: string) => void;
+  onMealUpdate?: (dayIndex: number, mealType: MealType, newValue: string) => void;
   isLoading: boolean;
   isSwapMode?: boolean;
-  onSwapSelect?: (dayIndex: number, mealType: 'breakfast' | 'lunch' | 'dinner') => void;
-  selectedSwap?: { dayIndex: number; mealType: 'breakfast' | 'lunch' | 'dinner' } | null;
+  onSwapSelect?: (dayIndex: number, mealType: MealType) => void;
+  selectedSwap?: { dayIndex: number; mealType: MealType } | null;
   dateLabel?: string;
   showPrepReminders?: boolean;
   showQuantities?: boolean;
   isLastDay?: boolean;
   onOpenRecipe?: (mealName: string) => void;
   onUpgrade?: () => void;
+  isSelectedDay?: boolean;
 }
+
+const LABEL_STYLES: Record<MealType, { icon: React.ElementType; accent: string; surface: string; label: string }> = {
+  breakfast: {
+    icon: Sun,
+    accent: 'text-amber-600',
+    surface: 'bg-amber-50',
+    label: 'Breakfast',
+  },
+  lunch: {
+    icon: CloudSun,
+    accent: 'text-orange-600',
+    surface: 'bg-orange-50',
+    label: 'Lunch',
+  },
+  dinner: {
+    icon: Moon,
+    accent: 'text-indigo-600',
+    surface: 'bg-indigo-50',
+    label: 'Dinner',
+  },
+};
+
+const PLACEHOLDERS: Record<MealType, string[]> = {
+  breakfast: ['Enter a tasty breakfast...', 'Add your morning meal...', 'Start the day right...', 'Plan something yummy...', 'Add a morning delight...', 'Something quick & healthy...', 'Fuel up with...'],
+  lunch: ['Enter a satisfying lunch...', 'Add a midday treat...', 'Power through with...', 'Try something new...', 'Add comfort food...', 'Keep it light & fresh...', 'Plan something filling...'],
+  dinner: ['Enter a delicious dinner...', 'Add an evening feast...', 'Something special...', 'Add family favorites...', 'Try a new cuisine...', 'Keep it simple & tasty...', 'End the day deliciously...'],
+};
+
+const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner'];
 
 const MealCard: React.FC<Props> = ({
   dayPlan,
   dayIndex,
-  enabledMeals = ['breakfast', 'lunch', 'dinner'],
+  enabledMeals = MEAL_ORDER,
   onRegenerate,
   onSmartEdit,
   onMealUpdate,
@@ -42,47 +89,76 @@ const MealCard: React.FC<Props> = ({
   showQuantities = true,
   isLastDay = false,
   onOpenRecipe,
-  onUpgrade
+  onUpgrade,
+  isSelectedDay = false,
 }) => {
-  // Family context for shared indicator and styling
   const { isInFamily, isFamilyModeActive } = useFamily();
-
-  // Feature gating
-  const { canAccess, isStandardOrAbove } = useFeatureGate();
+  const { canAccess } = useFeatureGate();
   const [gatedFeature, setGatedFeature] = useState<Feature | null>(null);
-
-
-  // Card-level edit mode (not per-meal)
   const [isEditing, setIsEditing] = useState(false);
+  const [editingTarget, setEditingTarget] = useState<MealType | null>(null);
+  const [openMenuMealType, setOpenMenuMealType] = useState<MealType | null>(null);
   const [editValues, setEditValues] = useState({
     breakfast: dayPlan.breakfast || '',
     lunch: dayPlan.lunch || '',
-    dinner: dayPlan.dinner || ''
+    dinner: dayPlan.dinner || '',
   });
 
-  const visibleMeals = enabledMeals.length > 0 ? enabledMeals : ['breakfast', 'lunch', 'dinner'];
-
-  // Check if this card is "empty" (no visible meals)
+  const visibleMeals = enabledMeals.length > 0 ? enabledMeals : MEAL_ORDER;
   const isEmpty = visibleMeals.every((mealType) => {
     const mealValue = dayPlan[mealType];
     return typeof mealValue !== 'string' || mealValue.trim() === '';
   });
-  // Feature gate handler
+  const canSmartEdit = canAccess('smart_edit');
+  const canRegen = canAccess('single_regen');
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!openMenuMealType) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuMealType(null);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenMenuMealType(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openMenuMealType]);
+
   const handleGatedAction = (feature: Feature, action: () => void) => {
     if (canAccess(feature)) {
       action();
-    } else {
-      setGatedFeature(feature);
+      return;
     }
+
+    setGatedFeature(feature);
   };
 
-  const startEditing = () => {
-    if (isSwapMode) return;
+  const startEditing = (target: MealType | null = null) => {
+    if (isSwapMode) {
+      return;
+    }
+
     setEditValues({
       breakfast: dayPlan.breakfast || '',
       lunch: dayPlan.lunch || '',
-      dinner: dayPlan.dinner || ''
+      dinner: dayPlan.dinner || '',
     });
+    setEditingTarget(target);
     setIsEditing(true);
   };
 
@@ -98,123 +174,163 @@ const MealCard: React.FC<Props> = ({
         onMealUpdate(dayIndex, 'dinner', editValues.dinner);
       }
     }
+
     setIsEditing(false);
+    setEditingTarget(null);
   };
 
   const cancelEdit = () => {
-    setIsEditing(false);
     setEditValues({
       breakfast: dayPlan.breakfast || '',
       lunch: dayPlan.lunch || '',
-      dinner: dayPlan.dinner || ''
+      dinner: dayPlan.dinner || '',
     });
+    setIsEditing(false);
+    setEditingTarget(null);
   };
 
-  // Render a meal section - either in edit mode or display mode
-  const renderMealSection = (
-    type: 'breakfast' | 'lunch' | 'dinner',
-    Icon: React.ElementType,
-    colorClass: string,
-    label: string,
-    placeholder: string,
-    isFirstSection: boolean
-  ) => {
-    const mealContent = dayPlan[type] || '';
-    const isSelected = selectedSwap?.dayIndex === dayIndex && selectedSwap?.mealType === type;
+  const prepContent = useMemo(() => {
+    const isValidPrep = (value: string | null | undefined): value is string => Boolean(value && value !== 'null' && value.trim() !== '');
+
+    if (!showPrepReminders || isLastDay || !dayPlan.prepAhead) {
+      return [];
+    }
+
+    return [
+      visibleMeals.includes('breakfast') && isValidPrep(dayPlan.prepAhead.forBreakfast) ? dayPlan.prepAhead.forBreakfast : null,
+      visibleMeals.includes('lunch') && isValidPrep(dayPlan.prepAhead.forLunch) ? dayPlan.prepAhead.forLunch : null,
+      visibleMeals.includes('dinner') && isValidPrep(dayPlan.prepAhead.forDinner) ? dayPlan.prepAhead.forDinner : null,
+    ].filter(Boolean) as string[];
+  }, [dayPlan.prepAhead, isLastDay, showPrepReminders, visibleMeals]);
+
+  const renderMealSection = (mealType: MealType, isFirstSection: boolean) => {
+    const { icon: Icon, accent, surface, label } = LABEL_STYLES[mealType];
+    const mealContent = dayPlan[mealType] || '';
+    const isSelected = selectedSwap?.dayIndex === dayIndex && selectedSwap?.mealType === mealType;
     const isSwapTarget = isSwapMode && !isSelected;
-    const hasMeal = !!mealContent.trim();
-    const canRegen = canAccess('single_regen');
+    const hasMeal = mealContent.trim().length > 0;
 
     return (
-      <div
-        onClick={() => isSwapMode && onSwapSelect && onSwapSelect(dayIndex, type)}
-        className={`relative ${!isFirstSection ? 'pt-2 border-t border-dashed border-gray-200' : ''} 
-          ${isSwapMode ? 'cursor-pointer transition-all p-2 rounded-lg' : ''}
-          ${isSelected ? 'bg-green-50 ring-2 ring-green-500 shadow-sm' : ''}
-          ${isSwapTarget ? 'hover:bg-gray-50 hover:ring-2 hover:ring-indigo-200' : ''}
-`}
+      <section
+        key={mealType}
+        onClick={() => isSwapMode && onSwapSelect && onSwapSelect(dayIndex, mealType)}
+        className={`rounded-2xl ${!isFirstSection ? 'border-t border-dashed border-slate-200 pt-2.5' : ''} ${isSwapMode ? 'cursor-pointer p-2 transition-all' : ''} ${isSelected ? 'bg-emerald-50 ring-2 ring-emerald-500 shadow-sm' : ''} ${isSwapTarget ? 'hover:bg-slate-50 hover:ring-2 hover:ring-indigo-200' : ''}`}
       >
-        <div className="flex justify-between items-start">
-          <div className={`flex items-center gap-2 text-xs font-semibold ${colorClass} mb-1`}>
-            <Icon className="w-3 h-3" /> {label}
-            {isSwapMode && isSelected && <span className="text-green-600 bg-green-100 px-1.5 py-0.5 rounded text-[10px]">Selected</span>}
-          </div>
-          {/* Regen and Recipe buttons - only when not editing */}
-          {!isSwapMode && !isEditing && hasMeal && (
-            <div className="flex items-center gap-0.5">
-              {onSwapSelect && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSwapSelect(dayIndex, type);
-                  }}
-                  className="opacity-60 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-emerald-600"
-                  title={`Swap ${label.toLowerCase()}`}
-                >
-                  <Shuffle className="w-3.5 h-3.5" />
-                </button>
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ${surface} ${accent}`}>
+              <Icon className="h-3.5 w-3.5" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">{label}</p>
+              {isSwapMode && isSelected && (
+                <p className="text-[11px] font-semibold text-emerald-600">Selected for swap</p>
               )}
+            </div>
+          </div>
+
+          {!isSwapMode && !isEditing && hasMeal && (
+            <div className="relative flex items-center gap-1" ref={openMenuMealType === mealType ? menuRef : undefined}>
               {onOpenRecipe && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); onOpenRecipe(mealContent); }}
-                  className="opacity-50 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-purple-600"
-                  title="View Recipe"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onOpenRecipe(mealContent);
+                  }}
+                  className="touch-target inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:border-slate-300 hover:text-indigo-600"
+                  title="Open recipe"
                 >
-                  <PlayCircle className="w-3.5 h-3.5" />
+                  <PlayCircle className="h-4 w-4" />
+                  <span>Recipe</span>
                 </button>
               )}
+
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleGatedAction('single_regen', () => onRegenerate(dayIndex, type));
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenMenuMealType((current) => current === mealType ? null : mealType);
                 }}
-                disabled={isLoading}
-                data-tour={dayIndex === 0 && type === 'breakfast' ? 'meal-regenerate' : undefined}
-                className={`opacity-50 group-hover:opacity-100 transition-opacity p-1 disabled:opacity-50 ${canRegen ? 'text-gray-400 hover:text-blue-600' : 'text-gray-300'
-                  }`}
-                title={canRegen ? 'Quick Regenerate' : 'Upgrade to Standard to unlock'}
+                className="touch-target inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                aria-label={`${label} options`}
               >
-                {canRegen ? (
-                  <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-                ) : (
-                  <Lock className="w-3 h-3" />
-                )}
+                <MoreHorizontal className="h-4 w-4" />
+                <span>More</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openMenuMealType === mealType ? 'rotate-180' : ''}`} />
               </button>
+
+              {openMenuMealType === mealType && (
+                <div
+                  className="absolute right-0 top-full z-30 mt-2 min-w-[188px] overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-[0_20px_48px_-24px_rgba(15,23,42,0.45)]"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {onSwapSelect && (
+                    <MenuAction
+                      icon={Shuffle}
+                      label="Swap meal"
+                      helper="Choose saved, recent, or AI ideas"
+                      onClick={() => {
+                        onSwapSelect(dayIndex, mealType);
+                        setOpenMenuMealType(null);
+                      }}
+                    />
+                  )}
+                  <MenuAction
+                    icon={canRegen ? RefreshCw : Lock}
+                    label={canRegen ? 'Regenerate meal' : 'Upgrade to regenerate'}
+                    helper="Refresh only this meal slot"
+                    onClick={() => {
+                      handleGatedAction('single_regen', () => onRegenerate(dayIndex, mealType));
+                      setOpenMenuMealType(null);
+                    }}
+                    disabled={isLoading}
+                  />
+                  {onMealUpdate && (
+                    <MenuAction
+                      icon={Pencil}
+                      label="Edit meal text"
+                      helper="Manually update this meal"
+                      onClick={() => {
+                        startEditing(mealType);
+                        setOpenMenuMealType(null);
+                      }}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Edit mode: text input */}
         {(isEditing || (!hasMeal && !isSwapMode)) ? (
           <input
             type="text"
-            value={editValues[type]}
-            onChange={(e) => setEditValues(prev => ({ ...prev, [type]: e.target.value }))}
-            onClick={(e) => { e.stopPropagation(); if (!isEditing) startEditing(); }}
-            placeholder={placeholder}
-            className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded focus:ring-2 focus:ring-orange-300 focus:border-orange-400 focus:bg-white transition-all"
+            value={editValues[mealType]}
+            onChange={(event) => setEditValues((previous) => ({ ...previous, [mealType]: event.target.value }))}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!isEditing) {
+                startEditing(mealType);
+              }
+            }}
+            autoFocus={isEditing && (editingTarget === mealType || (editingTarget === null && visibleMeals[0] === mealType))}
+            placeholder={PLACEHOLDERS[mealType][dayIndex % 7]}
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 transition-all focus:border-orange-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-200"
           />
         ) : (
-          <div className={`${isSwapMode && !isSelected ? 'opacity-70' : ''}`}>
-            <MealList content={mealContent} showQuantities={showQuantities} />
+          <div
+            className={`w-full rounded-2xl px-1 text-left transition ${isSwapMode && !isSelected ? 'opacity-70' : ''}`}
+          >
+            <MealList content={mealContent} showQuantities={showQuantities} bulletColorClass="text-slate-300" />
           </div>
         )}
-      </div>
+      </section>
     );
   };
 
-  // Placeholders for empty states
-  const placeholders = {
-    breakfast: ['Enter a tasty breakfast...', 'Add your morning meal...', 'Start the day right...', 'Plan something yummy...', 'Add a morning delight...', 'Something quick & healthy...', 'Fuel up with...'],
-    lunch: ['Enter a satisfying lunch...', 'Add a midday treat...', 'Power through with...', 'Try something new...', 'Add comfort food...', 'Keep it light & fresh...', 'Plan something filling...'],
-    dinner: ['Enter a delicious dinner...', 'Add an evening feast...', 'Something special...', 'Add family favorites...', 'Try a new cuisine...', 'Keep it simple & tasty...', 'End the day deliciously...']
-  };
-
-  const canSmartEdit = canAccess('smart_edit');
-
   return (
     <>
-      {/* Feature Gate Modal */}
       <FeatureGateModal
         isOpen={gatedFeature !== null}
         onClose={() => setGatedFeature(null)}
@@ -223,130 +339,135 @@ const MealCard: React.FC<Props> = ({
       />
 
       <div
-        className={`bg-white rounded-xl shadow-md border overflow-hidden hover:shadow-lg transition-all relative group
-          ${isEmpty ? 'border-2 border-dashed border-gray-200 hover:border-orange-300' : 'border-gray-100'}
-          ${isSwapMode ? 'ring-1 ring-indigo-200' : ''}
-          ${isFamilyModeActive ? 'border-l-4 border-l-purple-500' : ''}
-`}
+        className={`relative overflow-hidden rounded-[24px] border bg-white shadow-[0_16px_32px_-28px_rgba(15,23,42,0.28)] transition-all ${isEmpty ? 'border-dashed border-slate-200' : 'border-slate-200'} ${isSwapMode ? 'ring-1 ring-indigo-200' : ''} ${isSelectedDay ? 'border-orange-200 ring-1 ring-orange-100' : ''} ${isFamilyModeActive ? 'border-l-4 border-l-purple-500' : ''}`}
         data-tour={dayIndex === 0 ? 'meal-card' : undefined}
       >
-        {/* Header */}
-        <div className="bg-gray-50 px-4 py-3 border-b flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-gray-800">{dateLabel || dayPlan.day}</h3>
-            {/* Family sharing badge */}
-            {isInFamily && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-semibold">
-                <Users className="w-2.5 h-2.5" />
-                Shared
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5">
-            {/* Single Pencil Icon for whole card */}
-            {!isSwapMode && !isEmpty && !isEditing && onMealUpdate && (
-              <button
-                onClick={startEditing}
-                className="opacity-50 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
-                title="Edit all meals"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-            )}
-            {/* Save/Cancel when editing */}
-            {isEditing && (
-              <>
-                <button
-                  onClick={saveEdits}
-                  className="px-2 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 flex items-center gap-1"
-                >
-                  <Check className="w-3 h-3" /> Save
-                </button>
-                <button
-                  onClick={cancelEdit}
-                  className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-300 flex items-center gap-1"
-                >
-                  <X className="w-3 h-3" /> Cancel
-                </button>
-              </>
-            )}
-            {/* AI Edit button - with feature gating */}
-            {!isSwapMode && !isEditing && !isEmpty && (
-              <button
-                onClick={() => handleGatedAction('smart_edit', () => onSmartEdit(dayPlan, dayIndex))}
-                data-tour={dayIndex === 0 ? 'smart-edit' : undefined}
-                className={`text-xs flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${canSmartEdit
-                    ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100'
-                    : 'text-gray-400 bg-gray-100 hover:bg-gray-200'
-                  }`}
-                title={canSmartEdit ? 'Edit with AI' : 'Upgrade to Standard to unlock'}
-              >
-                {canSmartEdit ? (
-                  <MessageSquarePlus className="w-3 h-3" />
-                ) : (
-                  <Lock className="w-3 h-3" />
+        <div className="border-b border-slate-100 bg-white px-4 py-2.5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-[17px] font-semibold text-slate-900">{dateLabel || dayPlan.day}</h3>
+                {isInFamily && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-1 text-[10px] font-semibold text-orange-700">
+                    <Users className="h-3 w-3" />
+                    Shared
+                  </span>
                 )}
-                {canSmartEdit ? 'Edit with AI' : 'Upgrade'}
-              </button>
-            )}
+              </div>
+              <p className="mt-0.5 text-[11px] text-slate-400">
+                {isSelectedDay ? 'Current week focus' : 'Planned meals'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isEditing ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={saveEdits}
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  {!isMobile && !isEmpty && (
+                    <>
+                      {onMealUpdate && (
+                        <button
+                          type="button"
+                          onClick={() => startEditing(null)}
+                          className="touch-target rounded-full border border-slate-200 bg-white p-2 text-slate-400 hover:border-slate-300 hover:text-orange-600"
+                          title="Edit meals"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {!isEmpty && (
+                    <button
+                      type="button"
+                      onClick={() => handleGatedAction('smart_edit', () => onSmartEdit(dayPlan, dayIndex))}
+                      data-tour={dayIndex === 0 ? 'smart-edit' : undefined}
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${canSmartEdit ? 'border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                    >
+                      {canSmartEdit ? <MessageSquarePlus className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+                      {canSmartEdit ? 'Edit with AI' : 'Upgrade'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Meal Sections */}
-        <div className="p-4 space-y-4">
-          {visibleMeals.includes('breakfast') && renderMealSection('breakfast', Sun, 'text-amber-600', 'BREAKFAST', placeholders.breakfast[dayIndex % 7], true)}
-          {visibleMeals.includes('lunch') && renderMealSection('lunch', CloudSun, 'text-orange-600', 'LUNCH', placeholders.lunch[dayIndex % 7], !visibleMeals.includes('breakfast'))}
-          {visibleMeals.includes('dinner') && renderMealSection('dinner', Moon, 'text-indigo-600', 'DINNER', placeholders.dinner[dayIndex % 7], !visibleMeals.includes('breakfast') && !visibleMeals.includes('lunch'))}
+        <div className="space-y-2.5 bg-white px-4 py-3">
+          {visibleMeals.map((mealType, index) => renderMealSection(mealType, index === 0))}
         </div>
 
-        {/* Prep-Ahead Reminders - Skip for last day since next day is not planned */}
-        {(() => {
-          // Helper to check if prep value is valid (not null, 'null', or empty)
-          const isValidPrep = (val: string | null | undefined): val is string =>
-            !!val && val !== 'null' && val.trim() !== '';
-
-          const hasValidPrep = dayPlan.prepAhead && (
-            isValidPrep(dayPlan.prepAhead.forBreakfast) ||
-            isValidPrep(dayPlan.prepAhead.forLunch) ||
-            isValidPrep(dayPlan.prepAhead.forDinner)
-          );
-
-          if (!showPrepReminders || isLastDay || !hasValidPrep) return null;
-
-          return (
-            <div className="px-4 pb-3">
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                <div className="flex items-center gap-1.5 text-amber-700 text-xs font-semibold mb-1.5">
-                  <Bell className="w-3 h-3" />
-                  Prep Ahead
-                </div>
-                <div className="space-y-1 text-xs text-amber-800">
-                  {visibleMeals.includes('breakfast') && isValidPrep(dayPlan.prepAhead?.forBreakfast) && (
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-amber-500">•</span>
-                      <span>{dayPlan.prepAhead.forBreakfast}</span>
-                    </div>
-                  )}
-                  {visibleMeals.includes('lunch') && isValidPrep(dayPlan.prepAhead?.forLunch) && (
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-amber-500">•</span>
-                      <span>{dayPlan.prepAhead.forLunch}</span>
-                    </div>
-                  )}
-                  {visibleMeals.includes('dinner') && isValidPrep(dayPlan.prepAhead?.forDinner) && (
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-amber-500">•</span>
-                      <span>{dayPlan.prepAhead.forDinner}</span>
-                    </div>
-                  )}
-                </div>
+        {prepContent.length > 0 && (
+          <div className="border-t border-slate-100 px-4 pb-4">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3">
+              <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                <Bell className="h-3.5 w-3.5" />
+                Prep ahead
+              </div>
+              <div className="space-y-1.5 text-xs text-amber-900">
+                {prepContent.map((prepItem, index) => (
+                  <div key={`${prepItem}-${index}`} className="flex items-start gap-2">
+                    <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-amber-400" />
+                    <span>{prepItem}</span>
+                  </div>
+                ))}
               </div>
             </div>
-          );
-        })()}
-      </div >
+          </div>
+        )}
+      </div>
     </>
   );
 };
 
 export default MealCard;
+
+function MenuAction({
+  icon: Icon,
+  label,
+  helper,
+  onClick,
+  disabled = false,
+}: {
+  icon: React.ElementType;
+  label: string;
+  helper: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-slate-50 disabled:opacity-50"
+    >
+      <span className="mt-0.5 rounded-xl bg-slate-100 p-2 text-slate-600">
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-slate-800">{label}</span>
+        <span className="mt-0.5 block text-xs text-slate-500">{helper}</span>
+      </span>
+    </button>
+  );
+}

@@ -59,6 +59,12 @@ const BACKEND_CREDIT_COSTS: Record<string, number> = {
 // Keep old name for compatibility
 const CREDIT_COSTS = FRONTEND_CREDIT_COSTS;
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeDbUuid(value: unknown): string | null {
+    return typeof value === 'string' && UUID_PATTERN.test(value) ? value : null;
+}
+
 export default async function handler(req: any, res: any) {
     // CORS headers
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -74,7 +80,7 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { action, userId, payload, userApiKey } = req.body;
+    const { action, userId, familyGroupId, payload, userApiKey } = req.body;
 
     if (!action || !userId) {
         return res.status(400).json({ error: 'Missing action or userId' });
@@ -149,12 +155,43 @@ export default async function handler(req: any, res: any) {
             .eq('user_id', userId)
             .single();
 
+        let creditSummary: any = null;
+        const requestedFamilyGroupId = normalizeDbUuid(familyGroupId);
+        if (requestedFamilyGroupId) {
+            const { data: summaryRows, error: summaryError } = await supabase
+                .rpc('get_credit_summary', {
+                    p_user_id: userId,
+                    p_family_group_id: requestedFamilyGroupId
+                });
+
+            if (summaryError) {
+                console.error('Family credit summary error:', summaryError);
+            } else if (Array.isArray(summaryRows) && summaryRows[0]) {
+                creditSummary = summaryRows[0];
+
+                if (creditSummary.family_mode) {
+                    credits = {
+                        ...(credits || {}),
+                        total_meal_credits: creditSummary.total_credits || 0,
+                        total_grocery_credits: 0,
+                        total_edit_credits: 0,
+                        total_regen_credits: 0,
+                        byok_enabled: Boolean(creditSummary.byok_enabled)
+                    };
+                    console.log('Using family credit summary:', {
+                        familyGroupId: creditSummary.family_group_id,
+                        totalCredits: credits.total_meal_credits
+                    });
+                }
+            }
+        }
+
         // BYOK flag logic:
         // 1. If plan is 'byok', user MUST use their own key
         // 2. If user has a key AND billing_preference = 'byok', use their key
         // 3. Otherwise use platform credits
-        const userWantsByok = subscription?.billing_preference === 'byok';
-        const isPlanByok = subscription?.plan_id === 'byok';
+        const userWantsByok = (creditSummary?.billing_preference || subscription?.billing_preference) === 'byok';
+        const isPlanByok = (creditSummary?.plan_tier || subscription?.plan_id) === 'byok';
 
         if (isPlanByok || userWantsByok) {
             if (credits) credits.byok_enabled = true;
@@ -248,30 +285,47 @@ export default async function handler(req: any, res: any) {
                 return res.status(400).json({ error: 'Unknown action' });
         }
 
+        const isFamilyCreditMode = Boolean(creditSummary?.family_mode && creditSummary?.family_group_id);
+
         // 4. Consume credits if using platform key
-        if (!isByok && validCredits && validCredits.length > 0) {
+        if (!isByok && (isFamilyCreditMode || (validCredits && validCredits.length > 0))) {
             const creditConfig = CREDIT_COSTS[action as keyof typeof CREDIT_COSTS];
 
             // Only deduct frontend credits for meal generation (cost > 0)
             if (creditConfig.cost > 0) {
-                // Find first row with available meal credits and deduct
-                let creditsToDeduct = creditConfig.cost;
-                for (const row of validCredits) {
-                    if (creditsToDeduct <= 0) break;
-                    const available = row.meal_credits || 0;
-                    if (available > 0) {
-                        const deduct = Math.min(available, creditsToDeduct);
-                        const newValue = available - deduct;
+                if (isFamilyCreditMode) {
+                    const currentFamilyCredits = creditSummary.total_credits || 0;
+                    const { error: updateError } = await supabase
+                        .from('family_credit_pool')
+                        .update({
+                            total_credits: Math.max(currentFamilyCredits - creditConfig.cost, 0),
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('group_id', creditSummary.family_group_id);
 
-                        const { error: updateError } = await supabase
-                            .from('user_credits')
-                            .update({ meal_credits: newValue })
-                            .eq('id', row.id);
+                    if (updateError) {
+                        console.error('Family credit consumption error:', updateError);
+                    }
+                } else {
+                    // Find first row with available meal credits and deduct
+                    let creditsToDeduct = creditConfig.cost;
+                    for (const row of validCredits) {
+                        if (creditsToDeduct <= 0) break;
+                        const available = row.meal_credits || 0;
+                        if (available > 0) {
+                            const deduct = Math.min(available, creditsToDeduct);
+                            const newValue = available - deduct;
 
-                        if (updateError) {
-                            console.error('Credit consumption error:', updateError);
-                        } else {
-                            creditsToDeduct -= deduct;
+                            const { error: updateError } = await supabase
+                                .from('user_credits')
+                                .update({ meal_credits: newValue })
+                                .eq('id', row.id);
+
+                            if (updateError) {
+                                console.error('Credit consumption error:', updateError);
+                            } else {
+                                creditsToDeduct -= deduct;
+                            }
                         }
                     }
                 }
@@ -1084,6 +1138,14 @@ async function executeTranslateContent(ai: GoogleGenAI, payload: any) {
                         breakfast: { type: Type.STRING },
                         lunch: { type: Type.STRING },
                         dinner: { type: Type.STRING },
+                        prepAhead: {
+                            type: Type.OBJECT,
+                            properties: {
+                                forBreakfast: { type: Type.STRING },
+                                forLunch: { type: Type.STRING },
+                                forDinner: { type: Type.STRING },
+                            },
+                        },
                     },
                     required: ["day", "breakfast", "lunch", "dinner"],
                 },
@@ -1121,6 +1183,7 @@ async function executeTranslateContent(ai: GoogleGenAI, payload: any) {
             : '- Translate Meal names to English'
         }
     - Keep the JSON structure EXACTLY the same.
+        - Preserve prepAhead when present, translating its text and keeping forBreakfast, forLunch, and forDinner keys.
         - Return ONLY JSON.
         `
         : `

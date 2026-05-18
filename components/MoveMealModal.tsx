@@ -40,8 +40,8 @@ const MoveMealModal: React.FC<Props> = ({ transfer, onConfirm, onClose }) => {
         : (isFamilyModeActive ? 'Family' : 'Personal');
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+        <div className="app-modal-frame bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="app-modal-surface bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-gray-800">Organize Meal</h3>
                     <button onClick={onClose}><X className="w-5 h-5 text-gray-500" /></button>

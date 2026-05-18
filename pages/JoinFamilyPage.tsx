@@ -74,7 +74,7 @@ export default function JoinFamilyPage() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center p-4">
+        <div className="app-safe-screen bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8">
                 {/* Header */}
                 <div className="text-center mb-8">

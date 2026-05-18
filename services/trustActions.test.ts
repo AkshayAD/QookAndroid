@@ -12,7 +12,7 @@ describe('createTrustProgress', () => {
     expect(progress.pending).toContain('generate_second_menu');
     expect(progress.pending).not.toContain('install_pwa');
     expect(progress.totalCreditsEarned).toBe(2);
-    expect(progress.maxPossibleCredits).toBe(7);
+    expect(progress.maxPossibleCredits).toBe(6);
   });
 });
 

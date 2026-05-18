@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qook Payment Audit - Executive Summary</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell">
+      <p class="eyebrow">Payment audit report - 2026-05-18 - Asia/Calcutta</p>
+      <h1>Qook Payment End-to-End Readiness</h1>
+      <p class="subtitle">Production readiness review for Razorpay checkout, subscription handling, credit grants, Supabase billing data, API authorization, webhooks, and Android distribution. This is a report-only artifact. No product code, database migration, or Android configuration was changed.</p>
+      <nav class="nav" aria-label="Report navigation">
+        <a href="index.html">Summary</a>
+        <a href="issues.html">Issues Register</a>
+        <a href="change-plan.html">Change Plan</a>
+        <a href="test-matrix.html">Test Matrix</a>
+        <a href="optimizations.html">Optimizations</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="grid cols-4">
+      <article class="panel metric">
+        <span class="number" style="color: var(--p0)">7</span>
+        <span class="label">P0 production blockers</span>
+      </article>
+      <article class="panel metric">
+        <span class="number" style="color: var(--p1)">8</span>
+        <span class="label">P1 high-risk gaps</span>
+      </article>
+      <article class="panel metric">
+        <span class="number" style="color: var(--p2)">7</span>
+        <span class="label">P2 hardening items</span>
+      </article>
+      <article class="panel metric">
+        <span class="number" style="color: var(--ok)">45</span>
+        <span class="label">Existing tests passed</span>
+      </article>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Executive Decision</h2>
+      <div class="callout p0">
+        <strong>Do not treat the current payment stack as production ready.</strong>
+        The highest-risk issues allow underpayment-to-credit escalation, subscription plan escalation, unauthenticated credit use, client-side mutation of billing tables, duplicate webhook credit grants, silent webhook drops, and potential Google Play payments policy non-compliance for Android distribution.
+      </div>
+    </section>
+
+    <section class="grid cols-2" style="margin-top: 16px;">
+      <article class="panel">
+        <h2>End-to-End Flow Observed</h2>
+        <div class="flow" aria-label="Current payment flow">
+          <div class="step">
+            <strong>Pricing UI</strong>
+            <span><code>components/PricingContent.tsx</code> loads plans and packs from Supabase.</span>
+          </div>
+          <div class="step">
+            <strong>Order API</strong>
+            <span><code>api/create-order.ts</code> or <code>api/create-subscription.ts</code> creates Razorpay objects.</span>
+          </div>
+          <div class="step">
+            <strong>Checkout JS</strong>
+            <span><code>services/razorpayService.ts</code> loads Razorpay checkout in the browser/WebView.</span>
+          </div>
+          <div class="step">
+            <strong>Verify API</strong>
+            <span><code>api/verify-payment.ts</code> checks HMAC and calls Supabase RPC.</span>
+          </div>
+          <div class="step">
+            <strong>Credits</strong>
+            <span><code>verify_razorpay_payment</code> grants credits/subscription benefits in Supabase.</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>Scope Tested</h2>
+        <ul class="compact-list">
+          <li>Read and traced frontend checkout, backend API routes, Supabase migrations/RLS, AI credit consumption, cancellation, Android build, and Capacitor config.</li>
+          <li>Ran unit test suite, Vite production build, TypeScript check, Android debug build, Android lint attempt, and local browser preview of the pricing route.</li>
+          <li>Reviewed official Razorpay payment/webhook verification guidance, Google Play Billing/alternative billing guidance, and Supabase RLS guidance.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="grid cols-3" style="margin-top: 16px;">
+      <article class="panel">
+        <h3>Verification Passed</h3>
+        <ul class="compact-list">
+          <li><code>npm test -- --runInBand</code>: 19 files, 45 tests passed.</li>
+          <li><code>npm run build</code>: Vite production build completed.</li>
+          <li><code>gradlew :app:assembleDebug</code>: Android debug APK built.</li>
+          <li>Local browser loaded <code>/plan</code> shell and Razorpay copy.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>Verification Failed or Blocked</h3>
+        <ul class="compact-list">
+          <li><code>npx tsc --noEmit</code>: failed on two existing test type errors outside payment code.</li>
+          <li><code>gradlew :app:lintDebug</code>: failed due local Gradle metadata cache corruption.</li>
+          <li>No attached Android device/emulator, so native WebView checkout could not be executed.</li>
+          <li>No production Razorpay/Supabase dashboard access, so live payment settlement was not executed.</li>
+        </ul>
+      </article>
+      <article class="panel">
+        <h3>Local Runtime Finding</h3>
+        <ul class="compact-list">
+          <li>Local preview warned: Supabase credentials missing, app running in offline mode.</li>
+          <li>Built local web and Android assets contained <code>VITE_RAZORPAY_KEY_ID</code> as undefined because env vars were absent at build time.</li>
+          <li>This must be guarded in CI and release builds.</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Top Production Blockers</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Issue</th>
+            <th>Why it blocks production</th>
+            <th>Primary evidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Android uses Razorpay for digital goods without Play Billing implementation</td>
+            <td>Google Play distribution of digital subscriptions/credits generally requires Play Billing or an eligible alternative billing flow.</td>
+            <td><code>android/app/build.gradle</code> has no BillingClient dependency; <code>services/razorpayService.ts:168</code></td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Credit pack amount tampering</td>
+            <td>Backend trusts client amount and pack ID, so a valid low-value payment can be used to request high-value credits.</td>
+            <td><code>api/create-order.ts:9</code>, <code>api/create-order.ts:30</code>, <code>api/verify-payment.ts:62</code></td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Subscription plan escalation</td>
+            <td>Backend trusts client Razorpay plan/internal plan mapping, so a cheaper subscription can be verified as a higher internal plan.</td>
+            <td><code>api/create-subscription.ts:11</code>, <code>api/create-subscription.ts:68</code>, <code>api/verify-payment.ts:62</code></td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Missing required authentication on payment and AI routes</td>
+            <td>Routes allow requests when auth is absent, and AI routes trust body <code>userId</code>, making another user's credits targetable.</td>
+            <td><code>api/create-order.ts:17</code>, <code>api/create-subscription.ts:30</code>, <code>api/ai-proxy.ts:83</code></td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Billing tables have broad client mutation policies</td>
+            <td>RLS policies allow users to manage own subscription, credits, and purchases directly; later migrations do not remove those policies.</td>
+            <td><code>supabase/migrations/20260111_subscription_system.sql:244</code></td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Webhook reliability and idempotency gaps</td>
+            <td>Webhook parsing may not use raw body, duplicate events can grant duplicate credits, and processing failures still return HTTP 200.</td>
+            <td><code>api/razorpay-webhook.ts:52</code>, <code>api/razorpay-webhook.ts:117</code>, <code>api/razorpay-webhook.ts:122</code></td>
+          </tr>
+          <tr>
+            <td><span class="badge p0">P0</span></td>
+            <td>Secrets committed to repository docs/scripts</td>
+            <td>Razorpay test secret and an actual-looking webhook secret are visible in repository files and must be rotated.</td>
+            <td><code>scripts/setup-razorpay.js:5</code>, <code>DEPLOYMENT_STATUS.md:71</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="grid cols-2" style="margin-top: 16px;">
+      <article class="panel">
+        <h2>Recommended Reading Order</h2>
+        <ol class="compact-list">
+          <li><a href="issues.html">Issues Register</a> for exact risks, evidence, impact, and required changes.</li>
+          <li><a href="change-plan.html">Change Plan</a> for a sequenced remediation plan and acceptance gates.</li>
+          <li><a href="test-matrix.html">Test Matrix</a> for the tests needed before launch.</li>
+          <li><a href="optimizations.html">Optimizations</a> for improvements after blockers are addressed.</li>
+        </ol>
+      </article>
+      <article class="panel">
+        <h2>Official References Used</h2>
+        <ul class="compact-list">
+          <li><a href="https://github.com/razorpay/razorpay-node/wiki/Home">Razorpay Node SDK documentation</a></li>
+          <li><a href="https://github.com/razorpay/razorpay-node/blob/master/documents/paymentVerfication.md">Razorpay payment verification documentation</a></li>
+          <li><a href="https://support.google.com/googleplay/android-developer/answer/9858738">Google Play payments policy</a></li>
+          <li><a href="https://developer.android.com/google/play/billing/alternative/alternative-billing-with-user-choice-in-app">Google Play alternative billing with user choice</a></li>
+          <li><a href="https://developer.android.com/google/play/billing/billing_subscriptions">Google Play subscriptions documentation</a></li>
+          <li><a href="https://supabase.com/docs/guides/database/postgres/row-level-security">Supabase row-level security documentation</a></li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Generated as a report-only audit artifact. Product code changes are intentionally not included.</div>
+  </footer>
+</body>
+</html>

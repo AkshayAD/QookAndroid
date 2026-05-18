@@ -73,7 +73,7 @@ export default function ProfileView({
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50 pb-6">
+        <div className="flex flex-col bg-gray-50">
             {/* Header Profile Card */}
             <div className="bg-white p-6 pb-8 border-b border-gray-100 flex flex-col items-center">
                 <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center mb-4 shadow-sm">

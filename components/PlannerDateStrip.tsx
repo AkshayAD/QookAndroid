@@ -89,9 +89,9 @@ const PlannerDateStrip: React.FC<Props> = ({
     };
 
     return (
-        <div className="bg-white border-b border-gray-200">
+        <div className="overflow-hidden rounded-2xl bg-transparent">
             <div ref={scrollContainerRef} className="overflow-x-auto scrollbar-hide">
-                <div className="flex items-center gap-1 px-2 py-1.5 min-w-max">
+                <div className="flex min-w-max items-center gap-1 px-1 py-1">
                     <button
                         onClick={() => {
                             setCurrentMonth(subMonths(currentMonth, 1));
@@ -109,11 +109,11 @@ const PlannerDateStrip: React.FC<Props> = ({
                                 }
                             }, 100);
                         }}
-                        className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+                        className="flex-shrink-0 rounded-full p-1 hover:bg-white transition-colors"
                     >
                         <ChevronLeft className="w-4 h-4 text-gray-600" />
                     </button>
-                    <span className="text-xs font-bold text-gray-700 px-1 whitespace-nowrap">
+                    <span className="whitespace-nowrap px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-400">
                         {format(currentMonth, 'MMM yy')}
                     </span>
                     <button
@@ -133,7 +133,7 @@ const PlannerDateStrip: React.FC<Props> = ({
                                 }
                             }, 100);
                         }}
-                        className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0 mr-1"
+                        className="mr-1 flex-shrink-0 rounded-full p-1 hover:bg-white transition-colors"
                     >
                         <ChevronRight className="w-4 h-4 text-gray-600" />
                     </button>
@@ -150,34 +150,34 @@ const PlannerDateStrip: React.FC<Props> = ({
                                 key={format(day, 'yyyy-MM-dd')}
                                 ref={isSelected ? selectedDateRef : isFirstDay ? firstDayRef : undefined}
                                 onClick={() => onDateSelect(day)}
-                                className={`relative flex flex-col items-center px-2 py-1 rounded-lg min-w-[44px] transition-all ${
+                                className={`relative flex min-w-[44px] flex-col items-center rounded-xl px-2 py-1 transition-all ${
                                     isSelected
-                                        ? 'bg-orange-500 text-white shadow-md ring-2 ring-orange-500 ring-offset-1'
+                                        ? 'bg-orange-500 text-white shadow-sm'
                                         : isInRange
-                                            ? 'bg-orange-100 text-orange-700'
+                                            ? 'bg-orange-50 text-orange-700'
                                             : isCurrentDay
-                                                ? 'bg-indigo-100 text-indigo-700'
-                                                : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                                ? 'bg-indigo-50 text-indigo-700'
+                                                : 'bg-white text-gray-700 hover:bg-gray-100/80'
                                 } ${
-                                    indicators.hasMeals && !isSelected ? 'ring-2 ring-orange-300' : ''
+                                    indicators.hasMeals && !isSelected ? 'ring-1 ring-orange-200' : ''
                                 }`}
                                 title={indicators.source === 'schedule' ? 'Using saved schedule' : 'No meals planned'}
                             >
                                 {indicators.hasNonVeg && (
-                                    <span className="absolute -top-1 -right-1 rounded-full bg-gray-900 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-white">
+                                    <span className="absolute -top-1 -right-1 rounded-full bg-gray-900 px-1 py-0.5 text-[7px] font-bold uppercase tracking-wide text-white">
                                         NV
                                     </span>
                                 )}
 
-                                <span className={`text-[9px] font-medium ${
+                                <span className={`text-[8px] font-medium uppercase tracking-[0.08em] ${
                                     isSelected ? 'text-orange-100' : isInRange ? 'text-orange-500' : 'text-gray-500'
                                 }`}>
                                     {format(day, 'EEE')}
                                 </span>
-                                <span className={`text-sm font-bold ${isSelected ? 'text-white' : ''}`}>
+                                <span className={`text-[15px] font-bold ${isSelected ? 'text-white' : ''}`}>
                                     {format(day, 'd')}
                                 </span>
-                                <div className="mt-1 flex gap-1">
+                                <div className="mt-0.5 flex gap-1">
                                     <span className={`h-1.5 w-1.5 rounded-full ${indicators.hasBreakfast ? (isSelected ? 'bg-white' : 'bg-amber-400') : 'bg-gray-300'}`} />
                                     <span className={`h-1.5 w-1.5 rounded-full ${indicators.hasLunch ? (isSelected ? 'bg-white' : 'bg-orange-400') : 'bg-gray-300'}`} />
                                     <span className={`h-1.5 w-1.5 rounded-full ${indicators.hasDinner ? (isSelected ? 'bg-white' : 'bg-indigo-400') : 'bg-gray-300'}`} />
@@ -198,12 +198,12 @@ const PlannerDateStrip: React.FC<Props> = ({
                                 }
                             }, 100);
                         }}
-                        className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0 ml-1"
+                        className="ml-1 flex-shrink-0 rounded-full p-1 hover:bg-white transition-colors"
                         title="Next month"
                     >
                         <ChevronRight className="w-4 h-4 text-gray-600" />
                     </button>
-                    <span className="text-xs font-bold text-gray-700 px-1 whitespace-nowrap">
+                    <span className="whitespace-nowrap px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-gray-400">
                         {format(addMonths(currentMonth, 1), 'MMM')}
                     </span>
                 </div>

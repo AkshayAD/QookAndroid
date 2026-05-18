@@ -16,10 +16,11 @@ import { clearBootstrapCache, fetchBootstrapData } from './services/bootstrapSer
 import { applyReferral, awardReferrerCredits } from './services/referralService';
 import MealCard from './components/MealCard';
 import UserMenu from './components/UserMenu';
-import LaunchBanner from './components/LaunchBanner';
 import { ToastContainer, useToast } from './components/Toast';
 import BottomNav from './components/BottomNav';
 import PlannerDateStrip from './components/PlannerDateStrip';
+import PlannerActionStrip from './components/PlannerActionStrip';
+import PlannerStatusRail from './components/PlannerStatusRail';
 import SaveConflictModal from './components/SaveConflictModal';
 import LoadingState from './components/LoadingState';
 import FamilyModeToggle from './components/FamilyModeToggle';
@@ -28,7 +29,7 @@ import PhonePromptModal from './components/PhonePromptModal';
 import PreferenceLearningSheet from './components/PreferenceLearningSheet';
 import { useSignupTrustAction, useSecondMenuTrustAction, useShareMenuTrustAction, usePhoneTrustSync } from './hooks/useTrustActions';
 import { OnboardingData } from './types';
-import { differenceInCalendarDays, format, addDays, parseISO, startOfWeek, endOfWeek } from 'date-fns';
+import { differenceInCalendarDays, format, addDays, isSameDay, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import { getApiBaseUrl, isNative } from './utils/platform';
 import { DEFAULT_NOTIFICATION_SETTINGS, notificationService, NotificationSettings } from './services/notificationService';
 import { buildInventorySummary, createMealReplacementSignal, createRegenerateSignal, createSmartEditSignal, summarizePreferenceSignals } from './services/plannerMemoryService';
@@ -97,7 +98,7 @@ const isBuiltInProfile = (profile: PreferenceProfile): boolean => (
 );
 
 const FullScreenLoader = ({ message = 'Loading...' }: { message?: string }) => (
-  <div className="min-h-screen bg-gray-50 flex items-center justify-center flex-col gap-4">
+  <div className="app-content-screen bg-gray-50 flex items-center justify-center flex-col gap-4">
     <RefreshCw className="w-8 h-8 text-orange-500 animate-spin" />
     <p className="text-gray-500">{message}</p>
   </div>
@@ -184,7 +185,6 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   const [dataLoading, setDataLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'plan' | 'grocery' | 'preferences' | 'profile'>('plan');
   const [grocerySubTab, setGrocerySubTab] = useState<'list' | 'calendar'>('list');
-  const [isPlannerKitchenSetupExpanded, setIsPlannerKitchenSetupExpanded] = useState(false);
   const [isPreferencesKitchenSetupExpanded, setIsPreferencesKitchenSetupExpanded] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const [notificationSettingsLoaded, setNotificationSettingsLoaded] = useState(false);
@@ -219,8 +219,8 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   } | null>(null);
 
   // Get user ID
-  const userId = user?.id || '';
-  const isAuthenticated = !!user;
+  const userId = user?.id || (demoMode ? 'demo-user' : '');
+  const isAuthenticated = demoMode || !!user;
 
   // AI Config object
   const aiConfig = { apiKey, modelName };
@@ -537,6 +537,28 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     };
 
     const loadData = async () => {
+      if (demoMode) {
+        const currentWeekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+        const demoProfile: PreferenceProfile = {
+          ...DEFAULT_PREFERENCES,
+          id: 'demo-profile',
+          name: 'Demo Preferences',
+        };
+
+        if (isActive) {
+          setProfiles([demoProfile]);
+          setCurrentProfileId(demoProfile.id);
+          setHouseholdSettings(fallbackHouseholdSettings);
+          setOnboardingCompleted(true);
+          setTourCompletedAt(null);
+          setShowTour(false);
+          setWeeklyPlan({ ...DEMO_MEAL_PLAN, weekStartDate: currentWeekStart });
+          replaceGroceryList(DEMO_GROCERY_LIST, getVisibleWeekDateRange(parseISO(currentWeekStart)));
+          setDataLoading(false);
+        }
+        return;
+      }
+
       if (!isAuthenticated) {
         setDataLoading(false);
         return;
@@ -653,7 +675,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     return () => {
       isActive = false;
     };
-  }, [activeFamilyGroupId, forceOnboarding, isAuthenticated, userId]);
+  }, [activeFamilyGroupId, demoMode, forceOnboarding, getVisibleWeekDateRange, isAuthenticated, replaceGroceryList, userId]);
 
 
   // Phone collection now handled in onboarding wizard (NameLocationStep)
@@ -1739,6 +1761,21 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     }
   };
 
+  const handleShareCurrentPlan = useCallback(() => {
+    if (!weeklyPlan) {
+      return;
+    }
+
+    const dateRangeStr = `${format(planStartDate, 'MMM d')} - ${format(addDays(planStartDate, 6), 'MMM d, yyyy')}`;
+    setShareModalData({
+      isOpen: true,
+      type: 'plan',
+      data: weeklyPlan,
+      dateRange: dateRangeStr,
+      sourceLanguage: getActivePreferences().language,
+    });
+  }, [getActivePreferences, planStartDate, weeklyPlan]);
+
   const handleArchiveClick = () => {
     if (!weeklyPlan) return;
     setShowArchiveModal(true);
@@ -2213,7 +2250,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   // Show loading while auth is initializing
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="app-content-screen bg-gray-50 flex items-center justify-center">
         <RefreshCw className="w-8 h-8 text-orange-500 animate-spin" />
       </div>
     );
@@ -2254,7 +2291,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
   // Show loading while fetching data
   if (dataLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center flex-col gap-4">
+      <div className="app-content-screen bg-gray-50 flex items-center justify-center flex-col gap-4">
         <RefreshCw className="w-8 h-8 text-orange-500 animate-spin" />
         <p className="text-gray-500">Loading your data...</p>
       </div>
@@ -2320,37 +2357,28 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
     );
   }
 
-  const activeProfileName = profiles.find(p => p.id === currentProfileId)?.name || 'Default';
-
   return (
-    <div className="min-h-dvh bg-gray-50 flex flex-col">
-      {/* Launch Banner */}
-      <LaunchBanner onShowPricing={() => setIsPricingOpen(true)} />
-
-
-
-
-      {/* Profile View (Mobile Only) */}
-      {activeTab === 'profile' ? (
-        <main className="mobile-nav-offset-bottom flex-1 w-full bg-gray-50 animate-in fade-in duration-300 md:pb-0">
-          <Suspense fallback={<SectionLoader className="min-h-[40vh]" />}>
-            <ProfileView
-              userEmail={user?.email || null}
-              userId={user?.id || null}
-              onSignOut={handleUserSignOut}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-              onOpenPreferences={openPreferences}
-              onOpenFeedback={() => setIsFeedbackOpen(true)}
-              onStartTour={() => setShowTour(true)}
-              onOpenPricing={() => setIsPricingOpen(true)}
-              onDeleteAccount={() => setIsDeleteAccountOpen(true)}
-              onOpenSavedRecipes={() => setIsSavedRecipesPanelOpen(true)}
-            />
-          </Suspense>
-        </main>
-      ) : (
-        <main className="mobile-nav-offset-bottom flex-1 max-w-7xl mx-auto px-4 py-6 w-full md:pb-6">
-          <div className="flex flex-col h-full gap-6">
+    <div className="dashboard-viewport bg-gray-50">
+      <div className="dashboard-screen">
+        <div className="dashboard-scroll">
+          <div className="dashboard-screen-width gap-2 md:gap-6">
+            {activeTab === 'profile' ? (
+              <Suspense fallback={<SectionLoader className="min-h-[40vh]" />}>
+                <ProfileView
+                  userEmail={user?.email || null}
+                  userId={user?.id || null}
+                  onSignOut={handleUserSignOut}
+                  onOpenSettings={() => setIsSettingsOpen(true)}
+                  onOpenPreferences={openPreferences}
+                  onOpenFeedback={() => setIsFeedbackOpen(true)}
+                  onStartTour={() => setShowTour(true)}
+                  onOpenPricing={() => setIsPricingOpen(true)}
+                  onDeleteAccount={() => setIsDeleteAccountOpen(true)}
+                  onOpenSavedRecipes={() => setIsSavedRecipesPanelOpen(true)}
+                />
+              </Suspense>
+            ) : (
+              <>
 
             {/* Desktop Nav with Preferences Access */}
             <div className="hidden md:flex items-center justify-between border-b border-gray-200 mb-2">
@@ -2410,254 +2438,229 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
             </div>
 
             {/* PLANNER TAB */}
-            <div className={`${activeTab === 'plan' ? 'block' : 'hidden'}`}>
-              {/* Trust Progress Card for Free Tier Users */}
-              {isTrialActive && (
-                <TrustProgressCard
-                  className="mb-4"
-                  compact
+            {activeTab === 'plan' && (
+              <div className="flex flex-col gap-2 md:gap-3">
+                <PlannerStatusRail
+                  onShowPricing={() => setIsPricingOpen(true)}
                   onAddPhone={!hasSavedPhone ? () => setIsPhonePromptOpen(true) : undefined}
                 />
-              )}
 
-              <div className="mb-4">
-                {renderKitchenSetupCard(
-                  isPlannerKitchenSetupExpanded,
-                  () => setIsPlannerKitchenSetupExpanded((previous) => !previous)
+                {isTrialActive && (
+                  <TrustProgressCard
+                    className="hidden md:block"
+                    compact
+                    onAddPhone={!hasSavedPhone ? () => setIsPhonePromptOpen(true) : undefined}
+                  />
+                )}
+
+                <div className="planner-sticky-panel sticky top-0 z-30 -mx-3 space-y-1.5 border-b border-gray-200/70 bg-gray-50 px-3 pb-2 pt-1 shadow-[0_10px_22px_-22px_rgba(15,23,42,0.38)] md:static md:mx-0 md:space-y-4 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:pt-0 md:shadow-none">
+                  <PlannerDateStrip
+                    selectedDate={selectedPlannerDate}
+                    rangeStartDate={planStartDate}
+                    onDateSelect={handleSelectPlannerDate}
+                    schedule={schedule}
+                  />
+
+                  <PlannerActionStrip
+                    currentProfileId={currentProfileId}
+                    profiles={profiles}
+                    hasVisibleWeekMeals={hasVisibleWeekMeals}
+                    loading={loading}
+                    onProfileChange={setCurrentProfileId}
+                    onGeneratePlan={handleRegenerateClick}
+                    onOpenSavedRecipes={() => setIsSavedRecipesPanelOpen(true)}
+                    onShare={hasVisibleWeekMeals && weeklyPlan ? handleShareCurrentPlan : undefined}
+                  />
+
+                  <div className="hidden items-center justify-end px-1 md:flex">
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={handleRegenerateClick}
+                        disabled={loading}
+                        data-tour="generate-button"
+                        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-bold shadow-sm transition-all ${hasVisibleWeekMeals
+                          ? 'border-2 border-orange-500 bg-white text-orange-600 hover:bg-orange-50'
+                          : 'bg-orange-600 text-white hover:bg-orange-700'
+                          } disabled:opacity-70`}
+                        title={hasVisibleWeekMeals ? "Regenerate meal plan" : "Generate new meal plan"}
+                      >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                        <span>{hasVisibleWeekMeals ? 'Regenerate' : 'Generate Plan'}</span>
+                      </button>
+                      {hasVisibleWeekMeals && weeklyPlan && (
+                        <button
+                          type="button"
+                          onClick={handleShareCurrentPlan}
+                          className="touch-target inline-flex items-center justify-center rounded-lg border-2 border-indigo-500 bg-white p-2 text-indigo-600 shadow-sm hover:bg-indigo-50"
+                          title="Share plan"
+                          aria-label="Share plan"
+                        >
+                          <Share2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {loading && <LoadingState currentDay={streamingDay} isStreaming={streamingDay > 0} thinkingMessage={thinkingMessage} partialDays={partialDays} />}
+
+                {weeklyPlan && (() => {
+                  // Calculate dates starting from selected date in calendar strip
+                  const planDates = weeklyPlan.days.map((_, idx) => addDays(planStartDate, idx));
+
+                  return (
+                    <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-6 md:space-y-0 lg:grid-cols-3">
+                      {weeklyPlan.days.map((day, index) => (
+                        <div key={day.day} data-day-index={index}>
+                          <MealCard
+                            dayPlan={day}
+                            dayIndex={index}
+                            dateLabel={format(planDates[index], 'EEE, MMM d')}
+                            enabledMeals={selectedMeals}
+                            onRegenerate={handleRegenerateMeal}
+                            onSmartEdit={(plan, idx) => setSmartEditData({ dayPlan: plan, index: idx })}
+                            onMealUpdate={handleMealUpdate}
+                            isLoading={regenLoading}
+                            isSwapMode={!!swapCandidate}
+                            selectedSwap={swapCandidate}
+                            showPrepReminders={getActivePreferences().showPrepReminders ?? true}
+                            showQuantities={getActivePreferences().showQuantities ?? true}
+                            isLastDay={index === weeklyPlan.days.length - 1}
+                            isSelectedDay={isSameDay(planDates[index], selectedPlannerDate)}
+                            onSwapSelect={(dayIdx, type) => {
+                              if (swapCandidate?.dayIndex === dayIdx && swapCandidate?.mealType === type) {
+                                setSwapCandidate(null);
+                              } else {
+                                setSwapCandidate({ dayIndex: dayIdx, mealType: type });
+                                setIsAlternativesSidebarOpen(true);
+                              }
+                            }}
+                            onOpenRecipe={(mealName) => {
+                              setRecipeMealName(mealName);
+                              setIsRecipePanelOpen(true);
+                            }}
+                            onUpgrade={() => setIsPricingOpen(true)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                {canReviewLearning && (
+                  <div className="rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-indigo-900">Teach Qook is ready</p>
+                        <p className="text-sm text-indigo-700">
+                          Recent swaps, edits, or regenerations created {pendingSignalSummary?.meaningfulSignalCount || 0} learning signal{(pendingSignalSummary?.meaningfulSignalCount || 0) === 1 ? '' : 's'}.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={openTeachQook}
+                        className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
+                      >
+                        <Brain className="w-4 h-4" />
+                        Review Teach Qook
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
 
-              {canReviewLearning && (
-                <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* GROCERY TAB */}
+            {activeTab === 'grocery' && (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4">
+                  <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm font-semibold text-indigo-900">Teach Qook is ready</p>
-                      <p className="text-sm text-indigo-700">
-                        Recent swaps, edits, or regenerations created {pendingSignalSummary?.meaningfulSignalCount || 0} learning signal{(pendingSignalSummary?.meaningfulSignalCount || 0) === 1 ? '' : 's'}.
+                      <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        Groceries
+                        {groceryLoading && <RefreshCw className="w-4 h-4 animate-spin text-orange-500" />}
+                      </h2>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Check items as bought, or remember them as inventory and pantry staples for future meal plans.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={openTeachQook}
-                      className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
-                    >
-                      <Brain className="w-4 h-4" />
-                      Review Teach Qook
-                    </button>
                   </div>
-                </div>
-              )}
 
-              {/* Calendar Strip */}
-              <PlannerDateStrip
-                selectedDate={selectedPlannerDate}
-                rangeStartDate={planStartDate}
-                onDateSelect={handleSelectPlannerDate}
-                schedule={schedule}
-              />
-
-              {/* Header with actions - Compact layout with profile on mobile */}
-              <div className="flex justify-between items-center my-4 px-1">
-                <div className="flex items-center gap-2">
-                  {/* Mobile Profile Selector - Compact inline */}
-                  <div className="md:hidden flex items-center gap-1.5">
-                    <div className="relative">
-                      <select
-                        value={currentProfileId}
-                        onChange={(e) => setCurrentProfileId(e.target.value)}
-                        className="appearance-none bg-white border-2 border-gray-200 rounded-lg pl-2 pr-6 py-2 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all max-w-[90px] truncate"
-                      >
-                        {profiles.map(p => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                      <ChevronDown className="w-3 h-3 text-gray-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    </div>
-                    <button
-                      onClick={openPreferences}
-                      className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors border-2 border-gray-200 shadow-sm"
-                      title="Meal Preferences"
-                    >
-                      <Settings className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                <div className="flex gap-1.5">
-                  {/* Generate/Regenerate Button - Always visible */}
-                  <button
-                    onClick={handleRegenerateClick}
-                    disabled={loading}
-                    data-tour="generate-button"
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold shadow-sm transition-all ${hasVisibleWeekMeals
-                      ? 'bg-white border-2 border-orange-500 text-orange-600 hover:bg-orange-50'
-                      : 'bg-orange-600 text-white hover:bg-orange-700'
-                      } disabled:opacity-70`}
-                    title={hasVisibleWeekMeals ? "Regenerate meal plan" : "Generate new meal plan"}
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    <span className="hidden sm:inline">{hasVisibleWeekMeals ? 'Regenerate' : 'Generate Plan'}</span>
-                    <span className="sm:hidden">{hasVisibleWeekMeals ? 'Regen' : 'Generate'}</span>
-                    {!hasVisibleWeekMeals && <span className="text-orange-200 text-xs">(1 credit)</span>}
-                  </button>
-                  {hasVisibleWeekMeals && weeklyPlan && (
-                    <>
-                      {/* Share - Minimal outline style */}
+                  <div className="inline-flex w-full sm:w-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+                    {[
+                      { id: 'list', label: 'List', icon: ShoppingCart },
+                      { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
+                    ].map((tab) => (
                       <button
-                        onClick={() => {
-                          const dateRangeStr = `${format(planStartDate, 'MMM d')} - ${format(addDays(planStartDate, 6), 'MMM d, yyyy')}`;
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setGrocerySubTab(tab.id as 'list' | 'calendar')}
+                        className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${grocerySubTab === tab.id
+                          ? 'bg-orange-600 text-white shadow-sm'
+                          : 'text-gray-600 hover:bg-gray-50'
+                          }`}
+                      >
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Suspense fallback={<SectionLoader className="min-h-[24rem]" />}>
+                  {grocerySubTab === 'list' ? (
+                    <GroceryList
+                      items={groceryList}
+                      onToggle={toggleGroceryItem}
+                      onDeleteItem={handleDeleteGroceryItem}
+                      onAddItem={handleAddManualGroceryItem}
+                      onRememberItem={handleRememberGroceryItem}
+                      schedule={schedule}
+                      onGenerateFromDates={handleGenerateGroceryFromWeek}
+                      loading={groceryLoading}
+                      onLoadSavedList={(items, range) => replaceGroceryList(items, range)}
+                      userId={userId}
+                      currentDateRange={currentGroceryDateRange}
+                      onShare={(items, range) => setShareModalData({ isOpen: true, type: 'grocery', data: items, dateRange: range, sourceLanguage: activePreferences.language })}
+                    />
+                  ) : (
+                    <div className="flex flex-col min-h-0">
+                      <CalendarView
+                        schedule={schedule}
+                        onInitiateTransfer={setTransferData}
+                        onGenerateGroceryFromWeek={handleGenerateGroceryFromWeek}
+                        groceryLoading={groceryLoading}
+                        onMealUpdate={handleScheduleMealUpdate}
+                        onRevert={handleRevertSchedule}
+                        canRevert={scheduleHistory.length > 0}
+                        onLoadWeek={handleLoadWeek}
+                        onShareMeals={(scheduleData, range) => {
+                          const daysArray = Object.entries(scheduleData)
+                            .filter(([, day]) => day.breakfast || day.lunch || day.dinner)
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([dateKey, day]) => ({
+                              day: dateKey,
+                              breakfast: day.breakfast || '',
+                              lunch: day.lunch || '',
+                              dinner: day.dinner || ''
+                            }));
                           setShareModalData({
                             isOpen: true,
                             type: 'plan',
-                            data: weeklyPlan,
-                            dateRange: dateRangeStr,
-                            sourceLanguage: getActivePreferences().language
+                            data: { days: daysArray },
+                            dateRange: range || 'Calendar Schedule',
+                            sourceLanguage: activePreferences.language
                           });
                         }}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-white border-2 border-indigo-500 text-indigo-600 rounded-lg hover:bg-indigo-50 text-sm font-bold shadow-sm"
-                        title="Share plan"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Share</span>
-                      </button>
-                    </>
+                      />
+                    </div>
                   )}
-                </div>
+                </Suspense>
               </div>
-
-              {loading && <LoadingState currentDay={streamingDay} isStreaming={streamingDay > 0} thinkingMessage={thinkingMessage} partialDays={partialDays} />}
-
-              {weeklyPlan && (() => {
-                // Calculate dates starting from selected date in calendar strip
-                const planDates = weeklyPlan.days.map((_, idx) => addDays(planStartDate, idx));
-
-                return (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {weeklyPlan.days.map((day, index) => (
-                      <div key={day.day} data-day-index={index}>
-                        <MealCard
-                          dayPlan={day}
-                          dayIndex={index}
-                          dateLabel={format(planDates[index], 'EEE, MMM d')}
-                          enabledMeals={selectedMeals}
-                          onRegenerate={handleRegenerateMeal}
-                          onSmartEdit={(plan, idx) => setSmartEditData({ dayPlan: plan, index: idx })}
-                          onMealUpdate={handleMealUpdate}
-                          isLoading={regenLoading}
-                          isSwapMode={!!swapCandidate}
-                          selectedSwap={swapCandidate}
-                          showPrepReminders={getActivePreferences().showPrepReminders ?? true}
-                          showQuantities={getActivePreferences().showQuantities ?? true}
-                          isLastDay={index === weeklyPlan.days.length - 1}
-                          onSwapSelect={(dayIdx, type) => {
-                            if (swapCandidate?.dayIndex === dayIdx && swapCandidate?.mealType === type) {
-                              setSwapCandidate(null);
-                            } else {
-                              setSwapCandidate({ dayIndex: dayIdx, mealType: type });
-                              setIsAlternativesSidebarOpen(true);
-                            }
-                          }}
-                          onOpenRecipe={(mealName) => {
-                            setRecipeMealName(mealName);
-                            setIsRecipePanelOpen(true);
-                          }}
-                          onUpgrade={() => setIsPricingOpen(true)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* GROCERY TAB */}
-            <div className={`${activeTab === 'grocery' ? 'block' : 'hidden'}`}>
-              <div className="flex flex-col gap-4 mb-6">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                      Groceries
-                      {groceryLoading && <RefreshCw className="w-4 h-4 animate-spin text-orange-500" />}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      Check items as bought, or remember them as inventory and pantry staples for future meal plans.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="inline-flex w-full sm:w-auto rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
-                  {[
-                    { id: 'list', label: 'List', icon: ShoppingCart },
-                    { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setGrocerySubTab(tab.id as 'list' | 'calendar')}
-                      className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${grocerySubTab === tab.id
-                        ? 'bg-orange-600 text-white shadow-sm'
-                        : 'text-gray-600 hover:bg-gray-50'
-                        }`}
-                    >
-                      <tab.icon className="w-4 h-4" />
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Suspense fallback={<SectionLoader className="min-h-[24rem]" />}>
-                {grocerySubTab === 'list' ? (
-                  <GroceryList
-                    items={groceryList}
-                    onToggle={toggleGroceryItem}
-                    onDeleteItem={handleDeleteGroceryItem}
-                    onAddItem={handleAddManualGroceryItem}
-                    onRememberItem={handleRememberGroceryItem}
-                    schedule={schedule}
-                    onGenerateFromDates={handleGenerateGroceryFromWeek}
-                    loading={groceryLoading}
-                    onLoadSavedList={(items, range) => replaceGroceryList(items, range)}
-                    userId={userId}
-                    currentDateRange={currentGroceryDateRange}
-                    onShare={(items, range) => setShareModalData({ isOpen: true, type: 'grocery', data: items, dateRange: range, sourceLanguage: activePreferences.language })}
-                  />
-                ) : (
-                  <div className="h-[800px]">
-                    <CalendarView
-                      schedule={schedule}
-                      onInitiateTransfer={setTransferData}
-                      onGenerateGroceryFromWeek={handleGenerateGroceryFromWeek}
-                      groceryLoading={groceryLoading}
-                      onMealUpdate={handleScheduleMealUpdate}
-                      onRevert={handleRevertSchedule}
-                      canRevert={scheduleHistory.length > 0}
-                      onLoadWeek={handleLoadWeek}
-                      onShareMeals={(scheduleData, range) => {
-                        const daysArray = Object.entries(scheduleData)
-                          .filter(([, day]) => day.breakfast || day.lunch || day.dinner)
-                          .sort(([a], [b]) => a.localeCompare(b))
-                          .map(([dateKey, day]) => ({
-                            day: dateKey,
-                            breakfast: day.breakfast || '',
-                            lunch: day.lunch || '',
-                            dinner: day.dinner || ''
-                          }));
-                        setShareModalData({
-                          isOpen: true,
-                          type: 'plan',
-                          data: { days: daysArray },
-                          dateRange: range || 'Calendar Schedule',
-                          sourceLanguage: activePreferences.language
-                        });
-                      }}
-                    />
-                  </div>
-                )}
-              </Suspense>
-            </div>
+            )}
 
             {/* PREFERENCES TAB */}
-            <div className={`${activeTab === 'preferences' ? 'block' : 'hidden'}`}>
+            {activeTab === 'preferences' && (
               <div className="max-w-4xl space-y-4">
                 <div className="rounded-3xl border border-white/70 bg-white p-5 shadow-sm">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2719,28 +2722,15 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
                   </button>
                 </div>
               </div>
-            </div>
-
+            )}
+              </>
+            )}
           </div>
-        </main>
-      )}
+        </div>
+      </div>
 
       {/* Mobile Bottom Navigation */}
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
-
-      {/* Floating Edge Tab for Alternatives - only visible on Plan tab when plan exists */}
-      {activeTab === 'plan' && weeklyPlan && !isAlternativesSidebarOpen && (
-        <button
-          onClick={() => setIsAlternativesSidebarOpen(true)}
-          className="fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-gradient-to-l from-orange-500 to-red-600 text-white px-2 py-4 rounded-l-xl shadow-lg hover:px-3 transition-all duration-300 group"
-          title="Quick Swaps"
-        >
-          <div className="flex flex-col items-center gap-1">
-            <Shuffle className="w-5 h-5" />
-            <span className="text-[10px] font-bold writing-mode-vertical transform rotate-180" style={{ writingMode: 'vertical-rl' }}>Swaps</span>
-          </div>
-        </button>
-      )}
 
       {/* Modals */}
       {isAlternativesSidebarOpen && (
@@ -2868,6 +2858,7 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
             data={shareModalData.data}
             dateRange={shareModalData.dateRange}
             sourceLanguage={shareModalData.sourceLanguage}
+            familyGroupId={activeFamilyGroupId}
           />
         </Suspense>
       )}

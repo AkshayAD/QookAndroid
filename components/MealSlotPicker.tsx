@@ -27,12 +27,9 @@ export default function MealSlotPicker({
     if (!isOpen) return null;
 
     return (
-        <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50"
-            onClick={onClose}
-        >
+        <div className="app-modal-frame z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
             <div
-                className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
+                className="app-modal-surface bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
@@ -113,4 +110,3 @@ export default function MealSlotPicker({
         </div>
     );
 }
-

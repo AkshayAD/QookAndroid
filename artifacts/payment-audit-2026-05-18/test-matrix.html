@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qook Payment Audit - Test Matrix</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="shell">
+      <p class="eyebrow">Payment audit report - verification matrix</p>
+      <h1>Payment Test Matrix</h1>
+      <p class="subtitle">Tests that should exist before calling the payment system production ready. The matrix includes checks already run during this audit and the missing tests required after remediation.</p>
+      <nav class="nav" aria-label="Report navigation">
+        <a href="index.html">Summary</a>
+        <a href="issues.html">Issues Register</a>
+        <a href="change-plan.html">Change Plan</a>
+        <a href="test-matrix.html">Test Matrix</a>
+        <a href="optimizations.html">Optimizations</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="panel">
+      <h2>Audit Verification Performed</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Check</th>
+            <th>Result</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>npm test -- --runInBand</code></td>
+            <td><span class="badge ok">Pass</span></td>
+            <td>19 test files and 45 tests passed. No payment abuse/webhook/RLS coverage was found.</td>
+          </tr>
+          <tr>
+            <td><code>npm run build</code></td>
+            <td><span class="badge ok">Pass</span></td>
+            <td>Vite production build completed locally.</td>
+          </tr>
+          <tr>
+            <td><code>npx tsc --noEmit</code></td>
+            <td><span class="badge p1">Fail</span></td>
+            <td>Existing test type errors: <code>components/ShareModal.test.tsx</code> uses unknown <code>days</code>; <code>lib/preferenceProfile.test.ts</code> uses unknown <code>signalIds</code>.</td>
+          </tr>
+          <tr>
+            <td><code>gradlew :app:assembleDebug</code></td>
+            <td><span class="badge ok">Pass</span></td>
+            <td>Android debug APK built locally.</td>
+          </tr>
+          <tr>
+            <td><code>gradlew :app:lintDebug</code></td>
+            <td><span class="badge p1">Blocked</span></td>
+            <td>Gradle lint failed due local Gradle metadata cache corruption for <code>org.json:json:20250517</code>.</td>
+          </tr>
+          <tr>
+            <td>Browser preview <code>/plan</code></td>
+            <td><span class="badge p1">Partial</span></td>
+            <td>Page shell loaded, but Supabase env was missing and app ran in offline mode, so no real plan-card checkout was executed.</td>
+          </tr>
+          <tr>
+            <td>Android WebView payment flow</td>
+            <td><span class="badge p1">Blocked</span></td>
+            <td>No attached Android emulator/device was available through ADB.</td>
+          </tr>
+          <tr>
+            <td>Live Razorpay/Supabase payment flow</td>
+            <td><span class="badge p1">Blocked</span></td>
+            <td>No production dashboard credentials or safe test user/payment environment were available.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Required Automated Tests</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>Test Case</th>
+            <th>Expected Result</th>
+            <th>Priority</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Auth</td>
+            <td>Call every payment and AI credit route without bearer token.</td>
+            <td>401. No provider object created. No DB writes.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Auth</td>
+            <td>Call routes with token for user A and body containing user B.</td>
+            <td>403 or body user ignored. No user B reads/writes.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Credit packs</td>
+            <td>Create order with <code>pack_id</code> for high-value pack and tampered low <code>amount_inr</code>.</td>
+            <td>Server ignores amount or rejects; Razorpay order amount equals DB pack price only.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Credit packs</td>
+            <td>Verify payment where paid amount/currency does not match pending intent.</td>
+            <td>Verification rejected. No credits granted.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Subscriptions</td>
+            <td>Create cheap Razorpay subscription and submit expensive internal plan ID in verify request.</td>
+            <td>Verification rejected or resolves to original server-side plan only.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Subscriptions</td>
+            <td>Missing/invalid Razorpay subscription signature.</td>
+            <td>400. No entitlement change.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Idempotency</td>
+            <td>Submit same valid payment verification twice.</td>
+            <td>Only one credit grant/subscription activation; second response is safe duplicate acknowledgement.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Webhooks</td>
+            <td>Send valid Razorpay webhook with raw body and signature.</td>
+            <td>Accepted and stored exactly once.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Webhooks</td>
+            <td>Send same webhook event twice.</td>
+            <td>Second delivery is idempotent. No duplicate credit grant.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Webhooks</td>
+            <td>Simulate DB error after signature passes.</td>
+            <td>Returns retryable non-2xx. Event is not marked processed.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Webhooks</td>
+            <td>Send invalid signature.</td>
+            <td>400 and no DB state change.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>RLS</td>
+            <td>Authenticated client tries to insert/update/delete own <code>user_credits</code>.</td>
+            <td>Rejected by RLS.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>RLS</td>
+            <td>Authenticated client tries to update own <code>user_subscriptions</code> plan/status.</td>
+            <td>Rejected by RLS.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Credit consumption</td>
+            <td>Run two concurrent AI requests when user has one credit.</td>
+            <td>Only one succeeds; balance never goes negative.</td>
+            <td><span class="badge p1">P1</span></td>
+          </tr>
+          <tr>
+            <td>Cancellation</td>
+            <td>Cancel paid subscription mid-cycle.</td>
+            <td>Billing set to cancel at period end; entitlement remains active until period end.</td>
+            <td><span class="badge p1">P1</span></td>
+          </tr>
+          <tr>
+            <td>Refunds</td>
+            <td>Provider refund or chargeback event arrives.</td>
+            <td>Ledger records refund. Entitlement correction policy runs and is auditable.</td>
+            <td><span class="badge p1">P1</span></td>
+          </tr>
+          <tr>
+            <td>Android</td>
+            <td>Google Play build enters purchase flow.</td>
+            <td>Uses Play Billing or eligible alternative billing implementation. No non-compliant Razorpay digital checkout.</td>
+            <td><span class="badge p0">P0</span></td>
+          </tr>
+          <tr>
+            <td>Environment</td>
+            <td>Build with missing <code>VITE_RAZORPAY_KEY_ID</code>, Supabase URL, or required backend secrets.</td>
+            <td>Build/deploy fails before package is produced.</td>
+            <td><span class="badge p1">P1</span></td>
+          </tr>
+          <tr>
+            <td>Pricing</td>
+            <td>Compare app plan rows, Razorpay plans, docs, and UI display.</td>
+            <td>All active plan IDs, amounts, discounts, and credit grants match one release checklist.</td>
+            <td><span class="badge p1">P1</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel" style="margin-top: 16px;">
+      <h2>Manual Production Readiness Checklist</h2>
+      <div class="grid cols-2">
+        <div>
+          <h3>Razorpay</h3>
+          <ul class="compact-list">
+            <li>Dashboard plans match server DB active plans.</li>
+            <li>Webhook URL points to production endpoint and uses rotated secret.</li>
+            <li>Test webhook delivery succeeds and duplicate delivery is safe.</li>
+            <li>Capture/payment status is reconciled before credit grant.</li>
+            <li>Refund and chargeback handling is documented and tested.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Supabase</h3>
+          <ul class="compact-list">
+            <li>Billing write policies removed from client roles.</li>
+            <li>Service role key only exists server-side.</li>
+            <li>RPCs use fixed search path and explicit validation.</li>
+            <li>Ledger and idempotency constraints exist.</li>
+            <li>Backups and recovery path are confirmed before migration.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Frontend</h3>
+          <ul class="compact-list">
+            <li>Pricing UI handles loading, empty config, errors, payment success, duplicate callback, and cancel states.</li>
+            <li>Client sends product IDs only, never trusted prices or grant details.</li>
+            <li>Checkout brand, support email, policy links, and receipt copy are consistent.</li>
+            <li>Android and web route payment methods based on policy-safe platform capability.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Release</h3>
+          <ul class="compact-list">
+            <li>TypeScript, lint, tests, secret scan, web build, Android build, and Android lint pass.</li>
+            <li>Environment validation passes for preview and production.</li>
+            <li>Support runbook exists for failed payment, duplicate charge, missing credits, cancellation, and refund.</li>
+            <li>Monitoring alerts are configured for webhook failures and unusual credit grants.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Generated as a report-only audit artifact. Product code changes are intentionally not included.</div>
+  </footer>
+</body>
+</html>
