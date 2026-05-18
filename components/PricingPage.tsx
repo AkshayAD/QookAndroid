@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { initializeRazorpayPayment } from '../services/razorpayService';
 import { useNavigate } from 'react-router-dom';
 import { SubscriptionPlan, CreditPack } from '../types/subscription';
-import { getCreditPacks, upgradeSubscription } from '../services/subscriptionService';
+import { getCreditPacks } from '../services/subscriptionService';
+import { isNative } from '../utils/platform';
 
 interface PricingPageProps {
     onClose: () => void;
@@ -20,6 +21,7 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
     const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'plans' | 'credits'>('plans');
+    const nativePaymentsDisabled = isNative();
 
     useEffect(() => {
         document.body.style.overflow = 'hidden';
@@ -30,6 +32,11 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
     const handleSubscribe = async (planId: string) => {
         if (!user) {
             navigate('/auth'); // Or show login modal
+            return;
+        }
+
+        if (nativePaymentsDisabled) {
+            alert('Payments for the Android app must use Google Play Billing. Please use qook.in on the web while Android billing is being enabled.');
             return;
         }
 
@@ -53,7 +60,7 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
             },
             onError: (err) => {
                 console.error('Payment failed', err);
-                alert('Payment failed. Please try again.');
+                alert(typeof err === 'string' ? err : 'Payment failed. Please try again.');
             }
         });
     };
@@ -61,6 +68,11 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
     const handleBuyCredits = async (pack: CreditPack) => {
         if (!user) {
             navigate('/auth');
+            return;
+        }
+
+        if (nativePaymentsDisabled) {
+            alert('Payments for the Android app must use Google Play Billing. Please use qook.in on the web while Android billing is being enabled.');
             return;
         }
 
@@ -78,7 +90,7 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
             },
             onError: (err) => {
                 console.error('Payment failed', err);
-                alert('Payment failed. Please try again.');
+                alert(typeof err === 'string' ? err : 'Payment failed. Please try again.');
             }
         });
     };
@@ -211,8 +223,8 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
                                     {/* CTA Button */}
                                     <button
                                         onClick={() => handleSubscribe(plan.id)}
-                                        disabled={loading || isCurrentPlan(plan.id)}
-                                        className={`mt-4 w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${isCurrentPlan(plan.id)
+                                        disabled={loading || isCurrentPlan(plan.id) || nativePaymentsDisabled}
+                                        className={`mt-4 w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all ${isCurrentPlan(plan.id) || nativePaymentsDisabled
                                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                             : `bg-gradient-to-r ${getPlanColor(plan.id)} text-white hover:shadow-lg hover:-translate-y-0.5`
                                             }`}
@@ -221,6 +233,8 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
                                             <RefreshCw className="w-4 h-4 animate-spin" />
                                         ) : isCurrentPlan(plan.id) ? (
                                             'Current Plan'
+                                        ) : nativePaymentsDisabled ? (
+                                            'Web checkout only'
                                         ) : (
                                             <>Subscribe <ArrowRight className="w-4 h-4" /></>
                                         )}
@@ -269,9 +283,10 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
 
                                         <button
                                             onClick={() => handleBuyCredits(pack)}
-                                            className="mt-4 w-full py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors"
+                                            disabled={nativePaymentsDisabled}
+                                            className={`mt-4 w-full py-3 rounded-xl font-bold text-sm transition-colors ${nativePaymentsDisabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
                                         >
-                                            Buy Now
+                                            {nativePaymentsDisabled ? 'Web checkout only' : 'Buy Now'}
                                         </button>
                                     </div>
                                 ))}
@@ -282,7 +297,7 @@ export default function PricingPage({ onClose, onUpgradeSuccess }: PricingPagePr
 
                 {/* Footer */}
                 <div className="border-t border-gray-200 p-4 bg-gray-50 text-center text-xs text-gray-500">
-                    <p>Secure payments via Razorpay. Cancel anytime. Questions? <a href="mailto:akshaydewalwar1@gmail.com" className="text-indigo-600 hover:underline">Contact us</a></p>
+                    <p>{nativePaymentsDisabled ? 'Android checkout is disabled until Google Play Billing is enabled.' : 'Secure payments via Razorpay. Cancel anytime.'} Questions? <a href="mailto:akshaydewalwar1@gmail.com" className="text-indigo-600 hover:underline">Contact us</a></p>
                 </div>
             </div>
         </div>

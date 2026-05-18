@@ -4,6 +4,14 @@ import {
     buildMealPlanPrompt as buildSharedMealPlanPrompt,
     normalizeGeneratedWeeklyPlan,
 } from './promptContext.js';
+import {
+    assertRequestUser,
+    edgeCorsHeaders,
+    getErrorMessage,
+    getErrorStatus,
+    requireAuthenticatedUser,
+    requireEnv,
+} from '../lib/serverApi';
 
 /**
  * Streaming AI Proxy for QookCommander
@@ -20,9 +28,10 @@ export const config = {
 
 // Initialize Supabase admin client
 const getSupabaseAdmin = () => {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    return createClient(supabaseUrl, supabaseServiceKey);
+    return createClient(
+        process.env.SUPABASE_URL || requireEnv('VITE_SUPABASE_URL'),
+        requireEnv('SUPABASE_SERVICE_ROLE_KEY')
+    );
 };
 
 // Get user's tier to determine model
@@ -328,11 +337,7 @@ Keep meals practical, varied, and seasonally appropriate for ${country}.`;
 
 export default async function handler(req: Request) {
     // CORS headers for all responses
-    const corsHeaders = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    };
+    const corsHeaders = edgeCorsHeaders(req);
 
     // Handle CORS preflight
     if (req.method === 'OPTIONS') {
@@ -350,14 +355,9 @@ export default async function handler(req: Request) {
 
     try {
         const body = await req.json();
-        const { userId, preferences, learningSummary, userApiKey } = body;
-
-        if (!userId) {
-            return new Response(JSON.stringify({ error: 'Missing userId' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json', ...corsHeaders }
-            });
-        }
+        const { userId: requestedUserId, preferences, learningSummary, userApiKey } = body;
+        const authUserId = await requireAuthenticatedUser(req.headers.get('authorization'));
+        const userId = assertRequestUser(authUserId, requestedUserId);
 
         const supabase = getSupabaseAdmin();
 
@@ -419,48 +419,27 @@ export default async function handler(req: Request) {
         // =====================================================
         // CONSUME CREDITS (if not BYOK)
         // =====================================================
-        if (!isByok && validCredits.length > 0) {
-            // Sort credits so FREE credits are consumed FIRST
-            const creditTypePriority: Record<string, number> = {
-                'bonus': 0,      // Weekly bonuses - use first
-                'trial': 1,      // Trial credits - use second
-                'pack': 2,       // Purchased credits - use last
-            };
-            validCredits.sort((a, b) => {
-                const priorityA = creditTypePriority[a.credit_type] ?? 1;
-                const priorityB = creditTypePriority[b.credit_type] ?? 1;
-                return priorityA - priorityB;
+        if (!isByok) {
+            const { data: consumed, error: consumeError } = await supabase.rpc('consume_credits', {
+                p_user_id: userId,
+                p_action_type: 'meal_generation',
+                p_credits_needed: 1,
+                p_family_group_id: null,
             });
 
-            // Deduct 1 meal credit from first available row
-            for (const row of validCredits) {
-                const available = row.meal_credits || 0;
-                if (available > 0) {
-                    const { error: updateError } = await supabase
-                        .from('user_credits')
-                        .update({ meal_credits: available - 1 })
-                        .eq('id', row.id);
-
-                    if (updateError) {
-                        console.error('Credit consumption error:', updateError);
-                    } else {
-                        console.log(`Consumed 1 meal credit from row ${row.id} (was ${available}, now ${available - 1})`);
-                    }
-                    break;
+            if (consumeError || consumed !== true) {
+                if (consumeError) {
+                    console.error('Credit consumption error:', consumeError);
                 }
-            }
-
-            // Track usage
-            try {
-                await supabase.from('usage_tracking').insert({
-                    user_id: userId,
-                    action_type: 'meal_generation',
-                    credits_used: 1,
-                    backend_credit_cost: 0,
-                    api_source: 'platform'
+                return new Response(JSON.stringify({
+                    error: 'Insufficient credits',
+                    required: 1,
+                    available: totalMealCredits,
+                    creditType: 'meal_generation'
+                }), {
+                    status: 402,
+                    headers: { 'Content-Type': 'application/json', ...corsHeaders }
                 });
-            } catch (e) {
-                console.error('Usage tracking error:', e);
             }
         } else if (isByok) {
             // BYOK users: unlimited usage, just track
@@ -629,14 +608,14 @@ export default async function handler(req: Request) {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache, no-transform',
                 'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*',
+                ...corsHeaders,
                 'X-Accel-Buffering': 'no', // Critical for Vercel to not buffer SSE
             },
         });
     } catch (error: any) {
-        return new Response(JSON.stringify({ error: error.message || 'Internal error' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+        return new Response(JSON.stringify({ error: getErrorMessage(error, 'Internal error') }), {
+            status: getErrorStatus(error),
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
         });
     }
 }

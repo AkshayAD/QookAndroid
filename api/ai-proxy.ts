@@ -1,5 +1,4 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { createClient } from '@supabase/supabase-js';
 import {
     buildMealPlanPrompt as buildSharedMealPlanPrompt,
     buildSharedGenerationContext,
@@ -8,6 +7,14 @@ import {
     normalizeGeneratedAlternativesForRequestedMeals,
     normalizeGeneratedWeeklyPlan,
 } from './promptContext.js';
+import {
+    applyCors,
+    assertRequestUser,
+    getErrorMessage,
+    getErrorStatus,
+    getSupabaseAdminClient,
+    requireAuthenticatedUser,
+} from '../lib/serverApi';
 
 /**
  * Server-side AI Proxy for QookCommander
@@ -66,11 +73,7 @@ function normalizeDbUuid(value: unknown): string | null {
 }
 
 export default async function handler(req: any, res: any) {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    applyCors(req, res);
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -80,23 +83,17 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { action, userId, familyGroupId, payload, userApiKey } = req.body;
+    const { action, userId: requestedUserId, familyGroupId, payload, userApiKey } = req.body;
 
-    if (!action || !userId) {
-        return res.status(400).json({ error: 'Missing action or userId' });
+    if (!action) {
+        return res.status(400).json({ error: 'Missing action' });
     }
-
-    // Initialize Supabase client
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-        return res.status(500).json({ error: 'Server configuration error' });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
 
     try {
+        const authUserId = await requireAuthenticatedUser(req.headers.authorization);
+        const userId = assertRequestUser(authUserId, requestedUserId);
+        const supabase = getSupabaseAdminClient();
+
         // 1. Get all user credits (don't filter by expires_at - some might be null or format mismatch)
         const { data: creditRows, error: creditsError } = await supabase
             .from('user_credits')
@@ -204,6 +201,7 @@ export default async function handler(req: any, res: any) {
         // 2. Determine which API key to use
         let apiKeyToUse = '';
         let isByok = false;
+        const isFamilyCreditMode = Boolean(creditSummary?.family_mode && creditSummary?.family_group_id);
 
         // Check if user provided their own key (BYOK) and wants to use it
         if (userApiKey && (credits?.byok_enabled || userWantsByok)) {
@@ -233,7 +231,29 @@ export default async function handler(req: any, res: any) {
                 }
             }
 
-            // Backend credit checks DISABLED - all AI features are free except meal generation\n            // (which is handled by frontend credits above)
+            if (cost > 0) {
+                const { data: consumed, error: consumeError } = await supabase.rpc('consume_credits', {
+                    p_user_id: userId,
+                    p_action_type: type,
+                    p_credits_needed: cost,
+                    p_family_group_id: isFamilyCreditMode ? creditSummary.family_group_id : null,
+                });
+
+                if (consumeError || consumed !== true) {
+                    if (consumeError) {
+                        console.error('Credit consumption error:', consumeError);
+                    }
+                    return res.status(402).json({
+                        error: 'Insufficient credits',
+                        required: cost,
+                        available: credits?.total_meal_credits ?? 0,
+                        creditType: 'meal_generation',
+                    });
+                }
+            }
+
+            // Backend credit checks DISABLED - all AI features are free except meal generation
+            // (which is handled by frontend credits above)
 
             // Use platform API key from environment
             const platformKey = process.env.GEMINI_API_KEY;
@@ -285,65 +305,23 @@ export default async function handler(req: any, res: any) {
                 return res.status(400).json({ error: 'Unknown action' });
         }
 
-        const isFamilyCreditMode = Boolean(creditSummary?.family_mode && creditSummary?.family_group_id);
-
-        // 4. Consume credits if using platform key
-        if (!isByok && (isFamilyCreditMode || (validCredits && validCredits.length > 0))) {
+        // 4. Track zero-cost platform usage. Paid credit consumption is handled
+        // transactionally before generation by consume_credits.
+        if (!isByok) {
             const creditConfig = CREDIT_COSTS[action as keyof typeof CREDIT_COSTS];
 
-            // Only deduct frontend credits for meal generation (cost > 0)
-            if (creditConfig.cost > 0) {
-                if (isFamilyCreditMode) {
-                    const currentFamilyCredits = creditSummary.total_credits || 0;
-                    const { error: updateError } = await supabase
-                        .from('family_credit_pool')
-                        .update({
-                            total_credits: Math.max(currentFamilyCredits - creditConfig.cost, 0),
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('group_id', creditSummary.family_group_id);
-
-                    if (updateError) {
-                        console.error('Family credit consumption error:', updateError);
-                    }
-                } else {
-                    // Find first row with available meal credits and deduct
-                    let creditsToDeduct = creditConfig.cost;
-                    for (const row of validCredits) {
-                        if (creditsToDeduct <= 0) break;
-                        const available = row.meal_credits || 0;
-                        if (available > 0) {
-                            const deduct = Math.min(available, creditsToDeduct);
-                            const newValue = available - deduct;
-
-                            const { error: updateError } = await supabase
-                                .from('user_credits')
-                                .update({ meal_credits: newValue })
-                                .eq('id', row.id);
-
-                            if (updateError) {
-                                console.error('Credit consumption error:', updateError);
-                            } else {
-                                creditsToDeduct -= deduct;
-                            }
-                        }
-                    }
+            if (creditConfig.cost === 0) {
+                try {
+                    await supabase.from('usage_tracking').insert({
+                        user_id: userId,
+                        action_type: creditConfig.type || action,
+                        credits_used: 0,
+                        backend_credit_cost: 0,
+                        api_source: 'platform'
+                    });
+                } catch (e) {
+                    console.error('Usage tracking error:', e);
                 }
-            }
-
-            // Backend credit consumption DISABLED
-
-            // Track usage (backend cost is always 0 now)
-            try {
-                await supabase.from('usage_tracking').insert({
-                    user_id: userId,
-                    action_type: creditConfig.type || action,
-                    credits_used: creditConfig.cost,
-                    backend_credit_cost: 0,
-                    api_source: 'platform'
-                });
-            } catch (e) {
-                console.error('Usage tracking error:', e);
             }
         } else if (isByok) {
             // BYOK users: unlimited usage, just track
@@ -370,7 +348,9 @@ export default async function handler(req: any, res: any) {
             return res.status(401).json({ error: 'Invalid API key', details: error.message });
         }
 
-        return res.status(500).json({ error: 'AI generation failed', details: error.message });
+        return res.status(getErrorStatus(error)).json({
+            error: getErrorMessage(error, 'AI generation failed'),
+        });
     }
 }
 

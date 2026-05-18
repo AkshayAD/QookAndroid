@@ -40,6 +40,19 @@ const PLAN_SELECT = `
     weekly_bonus_grocery
 `;
 
+async function getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+    };
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+        headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
+    return headers;
+}
+
 export interface LaunchOfferSettings {
     enabled: boolean;
     trial_days: number;
@@ -279,40 +292,6 @@ async function getFallbackPersonalCreditSummary(userId: string): Promise<UserCre
     };
 }
 
-async function fallbackGrantCredits(
-    userId: string,
-    credits: number,
-    creditType: string,
-    expiresAt: string | null,
-    familyGroupId: string | null = null
-): Promise<void> {
-    if (!supabase || credits <= 0) {
-        return;
-    }
-
-    if (familyGroupId) {
-        await supabase
-            .from('family_credit_pool')
-            .upsert({
-                group_id: familyGroupId,
-                total_credits: credits,
-                updated_at: new Date().toISOString(),
-            }, { onConflict: 'group_id' });
-        return;
-    }
-
-    await supabase
-        .from('user_credits')
-        .insert({
-            user_id: userId,
-            credit_type: creditType,
-            credits,
-            meal_credits: credits,
-            expires_at: expiresAt,
-            metadata: {},
-        });
-}
-
 async function grantCredits(
     userId: string,
     credits: number,
@@ -337,7 +316,7 @@ async function grantCredits(
 
     if (error) {
         console.error('Error granting credits via RPC:', error);
-        await fallbackGrantCredits(userId, credits, creditType, expiresAt, familyGroupId);
+        throw error;
     }
 }
 
@@ -489,60 +468,9 @@ export async function createTrialSubscription(userId: string): Promise<boolean> 
         p_user_id: userId,
     });
 
-    if (!ensureError) {
-        return true;
-    }
-
-    console.warn('Falling back to client-side free trial creation:', ensureError);
-
-    const launchOffer = await getLaunchOfferSettings();
-    const trialDays = launchOffer?.enabled ? (launchOffer.trial_days || 28) : 28;
-    const freePlan = await getSubscriptionPlanById('free');
-    const trialCredits = launchOffer?.trial_credits ?? freePlan?.trial_credits ?? freePlan?.monthly_credits ?? 8;
-    const existingSubscription = await getUserSubscription(userId);
-    const existingTrialCredit = await supabase
-        .from('user_credits')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('credit_type', 'trial')
-        .limit(1)
-        .maybeSingle();
-
-    if (existingSubscription?.plan_id && existingSubscription.plan_id !== 'free') {
-        return true;
-    }
-
-    const trialEndsAt = existingSubscription?.trial_ends_at
-        ? new Date(existingSubscription.trial_ends_at)
-        : new Date();
-
-    if (!existingSubscription?.trial_ends_at) {
-        trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
-    }
-
-    let error = null;
-    if (!existingSubscription) {
-        const result = await supabase
-            .from('user_subscriptions')
-            .upsert({
-                user_id: userId,
-                plan_id: 'free',
-                status: 'active',
-                started_at: new Date().toISOString(),
-                billing_preference: 'credits',
-                trial_ends_at: trialEndsAt.toISOString(),
-                updated_at: new Date().toISOString(),
-            }, { onConflict: 'user_id' });
-        error = result.error;
-    }
-
-    if (error) {
-        console.error('Error creating trial subscription:', error);
+    if (ensureError) {
+        console.error('Error creating trial subscription via RPC:', ensureError);
         return false;
-    }
-
-    if (!existingTrialCredit.data) {
-        await grantCredits(userId, trialCredits, 'trial', trialEndsAt.toISOString(), 'Launch trial credits');
     }
 
     return true;
@@ -920,9 +848,7 @@ export async function cancelSubscriptionAPI(userId: string): Promise<{ success: 
     try {
         const response = await fetch(`${getApiBaseUrl()}/api/cancel-subscription`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: await getAuthHeaders(),
             body: JSON.stringify({ user_id: userId }),
         });
 
@@ -947,16 +873,15 @@ export async function updateBillingPreference(
         return false;
     }
 
-    const { error } = await supabase
-        .from('user_subscriptions')
-        .update({
-            billing_preference: preference,
-            updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId);
+    const response = await fetch(`${getApiBaseUrl()}/api/update-billing-preference`, {
+        method: 'POST',
+        headers: await getAuthHeaders(),
+        body: JSON.stringify({ user_id: userId, preference }),
+    });
 
-    if (error) {
-        console.error('Error updating billing preference:', error);
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        console.error('Error updating billing preference:', data.error || response.statusText);
         return false;
     }
 

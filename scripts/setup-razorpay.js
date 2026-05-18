@@ -1,46 +1,47 @@
 import Razorpay from 'razorpay';
 
-// Keys provided by user
-const KEY_ID = 'rzp_test_S2ScSFa6zTavtM';
-const KEY_SECRET = 'dCHVIiomg7YMxQ0Okx1pLp4u';
+const { VITE_RAZORPAY_KEY_ID: keyId, RAZORPAY_KEY_SECRET: keySecret } = process.env;
+
+if (!keyId || !keySecret) {
+    console.error('Set VITE_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET before running this script.');
+    process.exit(1);
+}
 
 const razorpay = new Razorpay({
-    key_id: KEY_ID,
-    key_secret: KEY_SECRET,
+    key_id: keyId,
+    key_secret: keySecret,
 });
 
 async function createPlans() {
-    console.log('Creating Razorpay Plans...');
+    console.log('Creating Razorpay plans...');
 
     try {
-        // 1. Basic Plan
         const basicPlan = await razorpay.plans.create({
             period: 'monthly',
             interval: 1,
             item: {
-                name: 'Cook Commander Basic',
-                amount: 4900, // in paise (49 INR)
+                name: 'Qook Basic',
+                amount: 4900,
                 currency: 'INR',
-                description: 'Basic Monthly Subscription'
-            }
+                description: 'Basic Monthly Subscription',
+            },
         });
         console.log('BASIC_PLAN_ID:', basicPlan.id);
 
-        // 2. Pro Plan
         const proPlan = await razorpay.plans.create({
             period: 'monthly',
             interval: 1,
             item: {
-                name: 'Cook Commander Pro',
-                amount: 9900, // in paise (99 INR)
+                name: 'Qook Pro',
+                amount: 9900,
                 currency: 'INR',
-                description: 'Pro Monthly Subscription'
-            }
+                description: 'Pro Monthly Subscription',
+            },
         });
         console.log('PRO_PLAN_ID:', proPlan.id);
-
     } catch (error) {
         console.error('Error creating plans:', error);
+        process.exit(1);
     }
 }
 

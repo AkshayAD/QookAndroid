@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getApiBaseUrl } from '../utils/platform';
+import { getApiBaseUrl, isNative } from '../utils/platform';
 
 declare global {
   interface Window {
@@ -87,8 +87,7 @@ function loadScript(src: string): Promise<boolean> {
 
 export async function createRazorpayOrder(
   userId: string,
-  planType: string,
-  billingCycle: 'monthly' | 'yearly' = 'monthly'
+  packId: string
 ): Promise<RazorpayOrderData> {
   const response = await fetch(`${getApiBaseUrl()}/api/create-order`, {
     method: 'POST',
@@ -96,8 +95,7 @@ export async function createRazorpayOrder(
     body: JSON.stringify({
       user_id: userId,
       userId,
-      plan_type: planType,
-      billing_cycle: billingCycle,
+      pack_id: packId,
     }),
   });
 
@@ -112,9 +110,8 @@ export async function createRazorpayOrder(
 
 export async function createRazorpaySubscription(
   userId: string,
-  planId: string,
+  internalPlanId: string,
   email: string,
-  internalPlanId?: string
 ): Promise<RazorpaySubscriptionData> {
   const response = await fetch(`${getApiBaseUrl()}/api/create-subscription`, {
     method: 'POST',
@@ -122,7 +119,6 @@ export async function createRazorpaySubscription(
     body: JSON.stringify({
       user_id: userId,
       userId,
-      plan_id: planId,
       internal_plan_id: internalPlanId,
       email,
     }),
@@ -165,6 +161,16 @@ export const initializeRazorpayPayment = async (
     onError: (err: any) => void;
   }
 ) => {
+  if (isNative()) {
+    options.onError('Payments for the Android app must use Google Play Billing. Please use qook.in on the web while Android billing is being enabled.');
+    return;
+  }
+
+  if (!import.meta.env.VITE_RAZORPAY_KEY_ID) {
+    options.onError('Payment configuration is missing. Please contact support.');
+    return;
+  }
+
   const loaded = await loadScript('https://checkout.razorpay.com/v1/checkout.js');
 
   if (!loaded) {
@@ -181,37 +187,25 @@ export const initializeRazorpayPayment = async (
       const { data: { user } } = await supabase.auth.getUser();
       orderData = await createRazorpaySubscription(
         userId,
-        item.planId,
-        user?.email || '',
-        item.internalPlanId
+        item.internalPlanId,
+        user?.email || ''
       );
       if (!orderData?.subscription_id && !orderData?.id) {
         throw new Error('Failed to create subscription');
       }
     } else {
       const item = options.item as RazorpayOrderProps;
-      const response = await fetch(`${getApiBaseUrl()}/api/create-order`, {
-        method: 'POST',
-        headers: await getRequestHeaders(),
-        body: JSON.stringify({
-          user_id: userId,
-          userId,
-          amount_inr: item.amount,
-          pack_id: item.packId,
-        }),
-      });
-
-      orderData = await response.json().catch(() => ({}));
-      if (!response.ok || !orderData?.id) {
-        throw new Error(orderData?.error || 'Failed to create order');
+      orderData = await createRazorpayOrder(userId, item.packId);
+      if (!orderData?.id) {
+        throw new Error('Failed to create order');
       }
     }
 
     const rzpOptions = {
       key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: !isSubscription ? (options.item as RazorpayOrderProps).amount * 100 : undefined,
+      amount: !isSubscription ? orderData.amount : undefined,
       currency: 'INR',
-      name: 'Cook Commander',
+      name: 'Qook',
       description: isSubscription ? 'Subscription Upgrade' : 'Credit Pack Purchase',
       order_id: !isSubscription ? orderData.id || orderData.order_id : undefined,
       subscription_id: isSubscription ? orderData.subscription_id || orderData.id : undefined,
@@ -224,9 +218,6 @@ export const initializeRazorpayPayment = async (
             razorpay_signature: response.razorpay_signature,
             razorpay_subscription_id: response.razorpay_subscription_id,
             type: options.type,
-            plan_id: isSubscription
-              ? (options.item as RazorpaySubscriptionProps).internalPlanId
-              : (options.item as RazorpayOrderProps).packId,
           });
 
           if (verifyData?.success !== false) {

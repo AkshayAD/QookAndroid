@@ -1,75 +1,204 @@
+import {
+    ApiError,
+    assertRequestUser,
+    getErrorMessage,
+    getErrorStatus,
+    getSupabaseAdminClient,
+    requireAuthenticatedUser,
+} from '../lib/serverApi';
+import {
+    assertRazorpayAmount,
+    createRazorpayClient,
+    requireRazorpayCapturedPayment,
+    verifyOrderSignature,
+    verifySubscriptionSignature,
+} from '../lib/razorpaySecurity';
 
-import Razorpay from 'razorpay';
-import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+async function finalizePackPayment(supabase: any, razorpay: any, userId: string, body: any) {
+    const orderId = body.razorpay_order_id;
+    const paymentId = body.razorpay_payment_id;
+    const signature = body.razorpay_signature;
 
-export default async function handler(req, res) {
+    if (!orderId || !paymentId || !signature) {
+        throw new ApiError(400, 'Missing Razorpay order payment fields');
+    }
+
+    verifyOrderSignature(orderId, paymentId, signature);
+
+    const { data: purchase, error: purchaseError } = await supabase
+        .from('credit_purchases')
+        .select('id, user_id, pack_id, credits_added, amount_inr, status, razorpay_order_id')
+        .eq('user_id', userId)
+        .eq('razorpay_order_id', orderId)
+        .maybeSingle();
+
+    if (purchaseError || !purchase) {
+        throw new ApiError(404, 'Pending credit purchase not found');
+    }
+
+    if (purchase.status === 'completed') {
+        return { success: true, duplicate: true };
+    }
+
+    const payment = await razorpay.payments.fetch(paymentId);
+    requireRazorpayCapturedPayment(payment);
+
+    if (payment.order_id !== orderId) {
+        throw new ApiError(400, 'Payment order mismatch');
+    }
+
+    assertRazorpayAmount(payment, Number(purchase.amount_inr), 'INR');
+
+    const { data, error } = await supabase.rpc('verify_razorpay_payment', {
+        p_user_id: userId,
+        p_order_id: orderId,
+        p_payment_id: paymentId,
+        p_signature: signature,
+        p_plan_id: purchase.pack_id,
+        p_type: 'pack',
+        p_subscription_id: null,
+        p_payload: { payment },
+    });
+
+    if (error) {
+        throw error;
+    }
+
+    await supabase
+        .from('credit_purchases')
+        .update({
+            status: 'completed',
+            razorpay_payment_id: paymentId,
+        })
+        .eq('id', purchase.id);
+
+    await supabase
+        .from('billing_payment_intents')
+        .update({
+            status: 'completed',
+            provider_payment_id: paymentId,
+            completed_at: new Date().toISOString(),
+        })
+        .eq('provider', 'razorpay')
+        .eq('provider_order_id', orderId)
+        .eq('user_id', userId);
+
+    return data || { success: true };
+}
+
+async function finalizeSubscriptionPayment(supabase: any, razorpay: any, userId: string, body: any) {
+    const subscriptionId = body.razorpay_subscription_id;
+    const paymentId = body.razorpay_payment_id;
+    const signature = body.razorpay_signature;
+
+    if (!subscriptionId || !paymentId || !signature) {
+        throw new ApiError(400, 'Missing Razorpay subscription payment fields');
+    }
+
+    verifySubscriptionSignature(subscriptionId, paymentId, signature);
+
+    const { data: intent, error: intentError } = await supabase
+        .from('billing_payment_intents')
+        .select('*')
+        .eq('provider', 'razorpay')
+        .eq('user_id', userId)
+        .eq('provider_subscription_id', subscriptionId)
+        .eq('item_type', 'subscription')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    if (intentError || !intent) {
+        throw new ApiError(404, 'Pending subscription intent not found');
+    }
+
+    if (intent.status === 'completed') {
+        return { success: true, duplicate: true };
+    }
+
+    const [payment, subscription] = await Promise.all([
+        razorpay.payments.fetch(paymentId),
+        razorpay.subscriptions.fetch(subscriptionId),
+    ]);
+
+    requireRazorpayCapturedPayment(payment);
+
+    if (payment.subscription_id !== subscriptionId) {
+        throw new ApiError(400, 'Payment subscription mismatch');
+    }
+
+    if (subscription.plan_id !== intent.provider_plan_id) {
+        throw new ApiError(400, 'Subscription plan mismatch');
+    }
+
+    const allowedAmounts = Array.isArray(intent.metadata?.allowed_amounts_inr)
+        ? intent.metadata.allowed_amounts_inr.map(Number).filter((amount: number) => amount > 0)
+        : [Number(intent.amount_inr)];
+
+    const amountMatches = allowedAmounts.some((amount: number) =>
+        payment.amount === amount * 100 && payment.currency === intent.currency
+    );
+
+    if (!amountMatches) {
+        throw new ApiError(400, 'Payment amount or currency mismatch');
+    }
+
+    const { data, error } = await supabase.rpc('verify_razorpay_payment', {
+        p_user_id: userId,
+        p_order_id: subscriptionId,
+        p_payment_id: paymentId,
+        p_signature: signature,
+        p_plan_id: intent.item_id,
+        p_type: 'subscription',
+        p_subscription_id: subscriptionId,
+        p_payload: { payment, subscription },
+    });
+
+    if (error) {
+        throw error;
+    }
+
+    await supabase
+        .from('billing_payment_intents')
+        .update({
+            status: 'completed',
+            provider_payment_id: paymentId,
+            completed_at: new Date().toISOString(),
+            metadata: {
+                ...(intent.metadata || {}),
+                payment_status: payment.status,
+            },
+        })
+        .eq('id', intent.id);
+
+    return data || { success: true };
+}
+
+export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const {
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature,
-        razorpay_subscription_id,
-        user_id,
-        plan_id, // Internal plan ID or pack ID
-        type // 'subscription' or 'pack'
-    } = req.body;
-
-    if (!razorpay_payment_id || !razorpay_signature || !user_id) {
-        return res.status(400).json({ error: 'Missing required fields' });
-    }
-
     try {
-        const key_secret = process.env.RAZORPAY_KEY_SECRET;
+        const authUserId = await requireAuthenticatedUser(req.headers.authorization);
+        const userId = assertRequestUser(authUserId, req.body?.user_id || req.body?.userId);
+        const type = req.body?.type === 'pack' ? 'pack' : 'subscription';
 
-        // 1. Verify Signature
-        let generated_signature = '';
-
-        if (type === 'subscription') {
-            // Subscription signature: razorpay_payment_id + | + razorpay_subscription_id
-            const message = razorpay_payment_id + '|' + razorpay_subscription_id;
-            generated_signature = crypto
-                .createHmac('sha256', key_secret)
-                .update(message)
-                .digest('hex');
-        } else {
-            // Order signature: razorpay_order_id + | + razorpay_payment_id
-            const message = razorpay_order_id + '|' + razorpay_payment_id;
-            generated_signature = crypto
-                .createHmac('sha256', key_secret)
-                .update(message)
-                .digest('hex');
+        if (!req.body?.razorpay_payment_id || !req.body?.razorpay_signature) {
+            return res.status(400).json({ error: 'Missing required payment fields' });
         }
 
-        if (generated_signature !== razorpay_signature) {
-            return res.status(400).json({ error: 'Invalid signature' });
-        }
+        const supabase = getSupabaseAdminClient();
+        const razorpay = createRazorpayClient();
+        const result = type === 'pack'
+            ? await finalizePackPayment(supabase, razorpay, userId, req.body)
+            : await finalizeSubscriptionPayment(supabase, razorpay, userId, req.body);
 
-        // 2. Grant Benefits via Supabase RPC
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-
-        const supabase = createClient(supabaseUrl, supabaseKey);
-
-        const { data, error } = await supabase.rpc('verify_razorpay_payment', {
-            p_user_id: user_id,
-            p_order_id: razorpay_order_id || razorpay_subscription_id,
-            p_payment_id: razorpay_payment_id,
-            p_signature: razorpay_signature,
-            p_plan_id: plan_id,
-            p_type: type || 'subscription',
-            p_subscription_id: razorpay_subscription_id || null,
-        });
-
-        if (error) throw error;
-
-        return res.status(200).json({ success: true, verified: true });
-
+        return res.status(200).json({ success: true, verified: true, result });
     } catch (error) {
         console.error('Error verifying payment:', error);
-        return res.status(500).json({ error: 'Verification failed', details: error.message });
+        return res.status(getErrorStatus(error)).json({
+            error: getErrorMessage(error, 'Payment verification failed'),
+        });
     }
 }

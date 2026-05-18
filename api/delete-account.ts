@@ -1,4 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+    applyCors,
+    assertRequestUser,
+    getErrorMessage,
+    getErrorStatus,
+    requireAuthenticatedUser,
+    requireEnv,
+} from '../lib/serverApi';
 
 /**
  * Account Deletion API
@@ -11,11 +19,7 @@ import { createClient } from '@supabase/supabase-js';
  */
 
 export default async function handler(req: any, res: any) {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    applyCors(req, res);
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
@@ -25,23 +29,12 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { userId, reason } = req.body;
-
-    if (!userId) {
-        return res.status(400).json({ error: 'Missing userId' });
-    }
-
-    // Initialize Supabase with service role key for admin operations
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-        return res.status(500).json({ error: 'Server configuration error' });
-    }
-
-    const supabase: any = createClient(supabaseUrl, supabaseServiceKey);
-
     try {
+        const { userId: requestedUserId, reason } = req.body;
+        const authUserId = await requireAuthenticatedUser(req.headers.authorization);
+        const userId = assertRequestUser(authUserId, requestedUserId);
+        const supabase: any = createClient(requireEnv('VITE_SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_ROLE_KEY'));
+
         // First, cancel any active Razorpay subscription
         // This should be immediate cancellation (not at cycle end) since account is being deleted
         const { data: subscription } = await supabase
@@ -52,7 +45,7 @@ export default async function handler(req: any, res: any) {
 
         if (subscription?.razorpay_subscription_id) {
             try {
-                const auth = Buffer.from(`${process.env.VITE_RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+                const auth = Buffer.from(`${requireEnv('VITE_RAZORPAY_KEY_ID')}:${requireEnv('RAZORPAY_KEY_SECRET')}`).toString('base64');
                 const response = await fetch(
                     `https://api.razorpay.com/v1/subscriptions/${subscription.razorpay_subscription_id}/cancel`,
                     {
@@ -115,9 +108,9 @@ export default async function handler(req: any, res: any) {
 
     } catch (error: any) {
         console.error('Account deletion error:', error);
-        return res.status(500).json({
+        return res.status(getErrorStatus(error)).json({
             success: false,
-            error: error.message || 'An unexpected error occurred'
+            error: getErrorMessage(error, 'An unexpected error occurred')
         });
     }
 }

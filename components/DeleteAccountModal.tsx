@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getApiBaseUrl } from '../utils/platform';
+import { supabase } from '../lib/supabase';
 
 interface DeleteAccountModalProps {
     isOpen: boolean;
@@ -26,10 +27,12 @@ export default function DeleteAccountModal({ isOpen, onClose }: DeleteAccountMod
         setError(null);
 
         try {
+            const { data: { session } } = await supabase.auth.getSession();
             const response = await fetch(`${getApiBaseUrl()}/api/delete-account`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
                 },
                 body: JSON.stringify({
                     userId: user.id,

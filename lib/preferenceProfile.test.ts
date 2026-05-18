@@ -18,15 +18,10 @@ describe('mergePreferenceSummaryIntoProfile', () => {
     };
 
     const merged = mergePreferenceSummaryIntoProfile(profile, {
-      signalIds: [],
-      meaningfulSignalCount: 4,
       breakfastPreferences: ['poha', 'Idli'],
       lunchPreferences: ['rajma chawal', 'Khichdi'],
       dinnerPreferences: ['SOUP', 'Paneer Bhurji'],
       dislikes: ['bottle gourd', 'Bitter Gourd'],
-      positiveFocus: [],
-      negativeFocus: [],
-      summary: '',
     });
 
     expect(merged.breakfastPreferences).toEqual(['Poha', 'Idli']);

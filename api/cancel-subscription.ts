@@ -1,5 +1,11 @@
-import { createClient } from '@supabase/supabase-js';
-import { authenticateSupabaseUser } from '../lib/supabaseAuth';
+import {
+    assertRequestUser,
+    getErrorMessage,
+    getErrorStatus,
+    getSupabaseAdminClient,
+    requireEnv,
+    requireAuthenticatedUser,
+} from '../lib/serverApi';
 
 /**
  * Cancel Subscription API
@@ -7,9 +13,6 @@ import { authenticateSupabaseUser } from '../lib/supabaseAuth';
  * Cancels a user's Razorpay subscription and updates the database.
  * The user keeps access until the current billing period ends.
  */
-
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
@@ -19,23 +22,16 @@ export default async function handler(req: any, res: any) {
     try {
         const { user_id } = req.body;
 
-        if (!user_id) {
-            return res.status(400).json({ error: 'user_id is required' });
-        }
+        const authUserId = await requireAuthenticatedUser(req.headers.authorization);
+        const userId = assertRequestUser(authUserId, user_id);
 
-        // Auth validation: verify the caller is the user themselves
-        const { userId: authUserId } = await authenticateSupabaseUser(req.headers.authorization);
-        if (authUserId && authUserId !== user_id) {
-            return res.status(403).json({ error: 'Cannot cancel another user\'s subscription' });
-        }
-
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+        const supabase = getSupabaseAdminClient();
 
         // 1. Get user's current subscription
         const { data: subscription, error: subError } = await supabase
             .from('user_subscriptions')
             .select('*')
-            .eq('user_id', user_id)
+            .eq('user_id', userId)
             .in('status', ['active', 'pending'])
             .single();
 
@@ -49,7 +45,7 @@ export default async function handler(req: any, res: any) {
             try {
                 // Cancel the Razorpay subscription
                 // Using fetch directly to pass cancel_at_cycle_end parameter
-                const auth = Buffer.from(`${process.env.VITE_RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
+                const auth = Buffer.from(`${requireEnv('VITE_RAZORPAY_KEY_ID')}:${requireEnv('RAZORPAY_KEY_SECRET')}`).toString('base64');
                 const response = await fetch(
                     `https://api.razorpay.com/v1/subscriptions/${subscription.razorpay_subscription_id}/cancel`,
                     {
@@ -79,15 +75,15 @@ export default async function handler(req: any, res: any) {
             }
         }
 
-        // 3. Update database - mark as cancelled (only active/pending subscriptions)
+        // 3. Keep entitlement active until the current billing period ends.
         const { error: updateError } = await supabase
             .from('user_subscriptions')
             .update({
-                status: 'cancelled',
                 cancelled_at: new Date().toISOString(),
+                cancel_at_period_end: true,
                 updated_at: new Date().toISOString()
             })
-            .eq('user_id', user_id)
+            .eq('user_id', userId)
             .in('status', ['active', 'pending']);
 
         if (updateError) {
@@ -99,10 +95,10 @@ export default async function handler(req: any, res: any) {
         await supabase
             .from('fact_subscription_events')
             .insert({
-                user_id,
+                user_id: userId,
                 event_type: 'cancel',
                 old_tier: subscription.plan_id,
-                new_tier: 'free',
+                new_tier: subscription.plan_id,
                 revenue_inr: 0
             });
 
@@ -118,9 +114,8 @@ export default async function handler(req: any, res: any) {
 
     } catch (error: any) {
         console.error('Cancel subscription error:', error);
-        return res.status(500).json({
-            error: 'Failed to cancel subscription',
-            details: error.message
+        return res.status(getErrorStatus(error)).json({
+            error: getErrorMessage(error, 'Failed to cancel subscription')
         });
     }
 }

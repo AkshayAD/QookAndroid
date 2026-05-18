@@ -1,426 +1,157 @@
-import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+import { getErrorMessage, getErrorStatus, getSupabaseAdminClient } from '../lib/serverApi';
+import { verifyWebhookSignature } from '../lib/razorpaySecurity';
 
-/**
- * Razorpay Webhook Handler
- *
- * Processes Razorpay subscription and payment lifecycle events.
- * This is the source of truth for subscription status changes
- * and recurring credit grants.
- *
- * Configure the webhook URL in Razorpay Dashboard:
- *   https://your-domain.com/api/razorpay-webhook
- *
- * Required events to enable:
- *   - subscription.activated
- *   - subscription.charged
- *   - subscription.cancelled
- *   - subscription.completed
- *   - subscription.halted
- *   - subscription.pending
- *   - payment.failed
- */
+export const config = {
+    api: {
+        bodyParser: false,
+    },
+};
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET!;
-
-function verifyWebhookSignature(body: string, signature: string, secret: string): boolean {
-    const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(body)
-        .digest('hex');
-    return crypto.timingSafeEqual(
-        Buffer.from(expectedSignature),
-        Buffer.from(signature)
-    );
+async function readRawBody(req: any): Promise<string> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks).toString('utf8');
 }
 
-export default async function handler(req: any, res: any) {
-    // Only accept POST
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    // 1. Verify Razorpay signature
-    const razorpaySignature = req.headers['x-razorpay-signature'];
-    if (!razorpaySignature) {
-        console.warn('Webhook received without signature header');
-        return res.status(400).json({ error: 'Missing signature' });
-    }
-
-    const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-
-    if (webhookSecret) {
-        try {
-            const isValid = verifyWebhookSignature(rawBody, razorpaySignature, webhookSecret);
-            if (!isValid) {
-                console.error('Webhook signature verification failed');
-                return res.status(400).json({ error: 'Invalid signature' });
-            }
-        } catch (err: any) {
-            console.error('Signature verification error:', err.message);
-            return res.status(400).json({ error: 'Signature verification failed' });
-        }
-    } else {
-        console.warn('RAZORPAY_WEBHOOK_SECRET not set — skipping signature verification');
-    }
-
-    // 2. Parse event
-    const event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const eventType = event?.event;
-    const payload = event?.payload;
-
-    if (!eventType || !payload) {
-        return res.status(400).json({ error: 'Invalid webhook payload' });
-    }
-
-    console.log(`Razorpay webhook received: ${eventType}`);
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    try {
-        switch (eventType) {
-            case 'subscription.activated':
-                await handleSubscriptionActivated(supabase, payload);
-                break;
-
-            case 'subscription.charged':
-                await handleSubscriptionCharged(supabase, payload);
-                break;
-
-            case 'subscription.cancelled':
-                await handleSubscriptionCancelled(supabase, payload);
-                break;
-
-            case 'subscription.completed':
-                await handleSubscriptionCompleted(supabase, payload);
-                break;
-
-            case 'subscription.halted':
-                await handleSubscriptionHalted(supabase, payload);
-                break;
-
-            case 'subscription.pending':
-                await handleSubscriptionPending(supabase, payload);
-                break;
-
-            case 'payment.failed':
-                await handlePaymentFailed(supabase, payload);
-                break;
-
-            default:
-                console.log(`Unhandled webhook event: ${eventType}`);
-        }
-
-        // Always respond 200 to Razorpay to acknowledge receipt
-        return res.status(200).json({ status: 'ok', event: eventType });
-    } catch (error: any) {
-        console.error(`Error processing webhook ${eventType}:`, error);
-        // Still return 200 to prevent Razorpay retries on app-level errors
-        // Razorpay will keep retrying on non-2xx, which could cause duplicates
-        return res.status(200).json({ status: 'error', message: error.message });
-    }
+function getEntityId(payload: any): string {
+    return payload?.payment?.entity?.id
+        || payload?.subscription?.entity?.id
+        || payload?.order?.entity?.id
+        || 'unknown';
 }
 
-// =====================================================
-// Event Handlers
-// =====================================================
-
-/**
- * subscription.activated — First payment successful, subscription is now active.
- * This is where we link the Razorpay subscription to our database record.
- */
-async function handleSubscriptionActivated(supabase: any, payload: any) {
-    const subscription = payload.subscription?.entity;
-    if (!subscription) return;
-
-    const razorpaySubId = subscription.id;
-    const razorpayPlanId = subscription.plan_id;
-    const razorpayCustomerId = subscription.customer_id;
-
-    // Find the user by their razorpay_subscription_id
-    // (set during create-subscription or verify-payment)
-    const user = await findUserByRazorpaySubscription(supabase, razorpaySubId);
-
-    if (!user) {
-        console.warn(`subscription.activated: No user found for Razorpay sub ${razorpaySubId}`);
-        return;
+function getWebhookEventKey(req: any, event: any): string {
+    const headerId = req.headers['x-razorpay-event-id'];
+    if (typeof headerId === 'string' && headerId) {
+        return headerId;
     }
+    if (event?.id) {
+        return event.id;
+    }
+    return [
+        event?.event || 'unknown',
+        getEntityId(event?.payload),
+        event?.created_at || 'no-ts',
+    ].join(':');
+}
 
-    // Look up internal plan from razorpay_plan_id
-    const internalPlanId = await resolveInternalPlanId(supabase, razorpayPlanId) || user.plan_id;
-
-    const now = new Date();
-    const renewsAt = new Date(now);
-    renewsAt.setDate(renewsAt.getDate() + 28);
-
-    await supabase
-        .from('user_subscriptions')
-        .update({
-            status: 'active',
-            plan_id: internalPlanId,
-            razorpay_subscription_id: razorpaySubId,
-            razorpay_customer_id: razorpayCustomerId || null,
-            started_at: now.toISOString(),
-            renews_at: renewsAt.toISOString(),
-            cancelled_at: null,
-            updated_at: now.toISOString(),
+async function beginWebhookEvent(supabase: any, eventKey: string, eventType: string, payload: any) {
+    const now = new Date().toISOString();
+    const { data, error } = await supabase
+        .from('billing_webhook_events')
+        .insert({
+            provider: 'razorpay',
+            event_key: eventKey,
+            event_type: eventType,
+            status: 'processing',
+            payload,
+            attempt_count: 1,
+            updated_at: now,
         })
-        .eq('user_id', user.user_id);
-
-    await logSubscriptionEvent(supabase, user.user_id, 'subscribe', null, internalPlanId, 0);
-
-    console.log(`subscription.activated: User ${user.user_id} activated on plan ${internalPlanId}`);
-}
-
-/**
- * subscription.charged — A recurring payment was collected.
- * Grant credits for the new billing period.
- */
-async function handleSubscriptionCharged(supabase: any, payload: any) {
-    const subscription = payload.subscription?.entity;
-    const payment = payload.payment?.entity;
-    if (!subscription) return;
-
-    const razorpaySubId = subscription.id;
-    const user = await findUserByRazorpaySubscription(supabase, razorpaySubId);
-
-    if (!user) {
-        console.warn(`subscription.charged: No user found for Razorpay sub ${razorpaySubId}`);
-        return;
-    }
-
-    const internalPlanId = user.plan_id;
-
-    // Fetch plan details for credit amounts
-    const { data: plan } = await supabase
-        .from('subscription_plans')
-        .select('unified_credits, monthly_credits, weekly_bonus, weekly_bonus_credits')
-        .eq('id', internalPlanId)
+        .select('id, status, updated_at')
         .single();
 
-    const monthlyCredits = plan?.unified_credits ?? plan?.monthly_credits ?? 0;
+    if (!error) {
+        return { id: data.id, duplicate: false };
+    }
 
-    // Update billing period
-    const now = new Date();
-    const renewsAt = new Date(now);
-    renewsAt.setDate(renewsAt.getDate() + 28);
+    if (error.code !== '23505') {
+        throw error;
+    }
 
-    await supabase
-        .from('user_subscriptions')
+    const { data: existing, error: existingError } = await supabase
+        .from('billing_webhook_events')
+        .select('id, status, updated_at, attempt_count')
+        .eq('provider', 'razorpay')
+        .eq('event_key', eventKey)
+        .single();
+
+    if (existingError) {
+        throw existingError;
+    }
+
+    if (existing.status === 'processed') {
+        return { id: existing.id, duplicate: true };
+    }
+
+    const updatedAt = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
+    const freshProcessing = existing.status === 'processing'
+        && Number.isFinite(updatedAt)
+        && Date.now() - updatedAt < 10 * 60 * 1000;
+
+    if (freshProcessing) {
+        return { id: existing.id, duplicate: true };
+    }
+
+    const { data: retried, error: retryError } = await supabase
+        .from('billing_webhook_events')
         .update({
-            status: 'active',
-            renews_at: renewsAt.toISOString(),
-            updated_at: now.toISOString(),
+            status: 'processing',
+            payload,
+            error_message: null,
+            attempt_count: (existing.attempt_count || 0) + 1,
+            updated_at: now,
         })
-        .eq('user_id', user.user_id);
+        .eq('id', existing.id)
+        .select('id')
+        .single();
 
-    // Grant monthly credits (skip for BYOK/unlimited plans)
-    if (monthlyCredits > 0) {
-        await supabase
-            .from('user_credits')
-            .insert({
-                user_id: user.user_id,
-                credit_type: 'plan',
-                credits: monthlyCredits,
-                meal_credits: monthlyCredits,
-                grocery_credits: 0,
-                edit_credits: 0,
-                regen_credits: 0,
-                expires_at: renewsAt.toISOString(),
-            });
+    if (retryError) {
+        throw retryError;
     }
 
-    // Log the charge event
-    const amountInr = payment?.amount ? Math.round(payment.amount / 100) : 0;
-    await logSubscriptionEvent(supabase, user.user_id, 'renew', internalPlanId, internalPlanId, amountInr);
-
-    console.log(`subscription.charged: User ${user.user_id} renewed, granted ${monthlyCredits} credits`);
+    return { id: retried.id, duplicate: false };
 }
 
-/**
- * subscription.cancelled — Razorpay confirms the subscription was cancelled.
- * If cancel_at_cycle_end was true, the user keeps access until period ends.
- */
-async function handleSubscriptionCancelled(supabase: any, payload: any) {
-    const subscription = payload.subscription?.entity;
-    if (!subscription) return;
-
-    const razorpaySubId = subscription.id;
-    const user = await findUserByRazorpaySubscription(supabase, razorpaySubId);
-
-    if (!user) {
-        console.warn(`subscription.cancelled: No user found for Razorpay sub ${razorpaySubId}`);
-        return;
-    }
-
-    // Only update if not already cancelled (avoid overwriting cancelled_at)
-    if (user.status !== 'cancelled') {
-        await supabase
-            .from('user_subscriptions')
-            .update({
-                status: 'cancelled',
-                cancelled_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            })
-            .eq('user_id', user.user_id)
-            .eq('status', 'active');
-    }
-
-    await logSubscriptionEvent(supabase, user.user_id, 'cancel', user.plan_id, 'free', 0);
-
-    console.log(`subscription.cancelled: User ${user.user_id} subscription cancelled`);
-}
-
-/**
- * subscription.completed — The subscription has ended (all cycles completed
- * or billing period expired after cancellation).
- * Downgrade user to free.
- */
-async function handleSubscriptionCompleted(supabase: any, payload: any) {
-    const subscription = payload.subscription?.entity;
-    if (!subscription) return;
-
-    const razorpaySubId = subscription.id;
-    const user = await findUserByRazorpaySubscription(supabase, razorpaySubId);
-
-    if (!user) {
-        console.warn(`subscription.completed: No user found for Razorpay sub ${razorpaySubId}`);
-        return;
-    }
-
-    const oldTier = user.plan_id;
-
+async function markWebhookEvent(supabase: any, id: string, status: 'processed' | 'failed', errorMessage?: string) {
     await supabase
-        .from('user_subscriptions')
+        .from('billing_webhook_events')
         .update({
-            status: 'expired',
-            plan_id: 'free',
-            razorpay_subscription_id: null,
+            status,
+            error_message: errorMessage || null,
+            processed_at: status === 'processed' ? new Date().toISOString() : null,
             updated_at: new Date().toISOString(),
         })
-        .eq('user_id', user.user_id);
-
-    await logSubscriptionEvent(supabase, user.user_id, 'downgrade', oldTier, 'free', 0);
-
-    console.log(`subscription.completed: User ${user.user_id} downgraded to free`);
+        .eq('id', id);
 }
 
-/**
- * subscription.halted — Multiple payment retries failed.
- * User should be notified to update payment method.
- */
-async function handleSubscriptionHalted(supabase: any, payload: any) {
-    const subscription = payload.subscription?.entity;
-    if (!subscription) return;
-
-    const razorpaySubId = subscription.id;
-    const user = await findUserByRazorpaySubscription(supabase, razorpaySubId);
-
-    if (!user) {
-        console.warn(`subscription.halted: No user found for Razorpay sub ${razorpaySubId}`);
-        return;
-    }
-
-    // Use 'halted' status — CHECK constraint was updated to allow this
-    await supabase
-        .from('user_subscriptions')
-        .update({
-            status: 'halted',
-            updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', user.user_id);
-
-    await logSubscriptionEvent(supabase, user.user_id, 'cancel', user.plan_id, 'free', 0);
-
-    console.log(`subscription.halted: User ${user.user_id} subscription halted due to payment failures`);
-}
-
-/**
- * subscription.pending — Subscription created but first payment not yet completed.
- */
-async function handleSubscriptionPending(supabase: any, payload: any) {
-    const subscription = payload.subscription?.entity;
-    if (!subscription) return;
-
-    console.log(`subscription.pending: Razorpay sub ${subscription.id} is pending first payment`);
-    // No action needed — subscription will be activated once payment succeeds
-}
-
-/**
- * payment.failed — A payment attempt failed.
- * Log it for tracking; Razorpay will retry automatically.
- */
-async function handlePaymentFailed(supabase: any, payload: any) {
-    const payment = payload.payment?.entity;
-    if (!payment) return;
-
-    const errorDescription = payment.error_description || 'Unknown error';
-    const errorCode = payment.error_code || 'unknown';
-
-    console.log(`payment.failed: Payment ${payment.id} failed — ${errorCode}: ${errorDescription}`);
-
-    // If this is tied to a subscription, find the user
-    if (payment.subscription_id) {
-        const user = await findUserByRazorpaySubscription(supabase, payment.subscription_id);
-        if (user) {
-            try {
-                await supabase
-                    .from('fact_subscription_events')
-                    .insert({
-                        user_id: user.user_id,
-                        event_type: 'cancel', // closest allowed event type
-                        old_tier: user.plan_id,
-                        new_tier: user.plan_id,
-                        revenue_inr: 0,
-                        payment_method: `failed:${errorCode}`,
-                    });
-            } catch (analyticsError) {
-                console.warn('Failed to log payment failure event:', analyticsError);
-            }
-        }
-    }
-}
-
-// =====================================================
-// Helper Functions
-// =====================================================
-
-async function findUserByRazorpaySubscription(
-    supabase: any,
-    razorpaySubscriptionId: string
-): Promise<{ user_id: string; plan_id: string; status: string } | null> {
-    const { data, error } = await supabase
-        .from('user_subscriptions')
-        .select('user_id, plan_id, status')
-        .eq('razorpay_subscription_id', razorpaySubscriptionId)
+async function findUserBySubscription(supabase: any, razorpaySubscriptionId: string) {
+    const { data: intent } = await supabase
+        .from('billing_payment_intents')
+        .select('user_id, item_id, provider_plan_id')
+        .eq('provider', 'razorpay')
+        .eq('provider_subscription_id', razorpaySubscriptionId)
+        .eq('item_type', 'subscription')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-    if (error) {
-        console.error('Error finding user by Razorpay subscription:', error);
-        return null;
+    if (intent) {
+        return {
+            user_id: intent.user_id,
+            plan_id: intent.item_id,
+            provider_plan_id: intent.provider_plan_id,
+        };
     }
+
+    const { data } = await supabase
+        .from('user_subscriptions')
+        .select('user_id, plan_id')
+        .eq('razorpay_subscription_id', razorpaySubscriptionId)
+        .maybeSingle();
 
     return data;
 }
 
-async function resolveInternalPlanId(
-    supabase: any,
-    razorpayPlanId: string
-): Promise<string | null> {
-    const { data, error } = await supabase
+async function resolveInternalPlanId(supabase: any, razorpayPlanId: string): Promise<string | null> {
+    const { data } = await supabase
         .from('subscription_plans')
         .select('id')
         .eq('razorpay_plan_id', razorpayPlanId)
         .maybeSingle();
-
-    if (error || !data) {
-        console.warn(`Could not resolve internal plan for Razorpay plan ${razorpayPlanId}`);
-        return null;
-    }
-
-    return data.id;
+    return data?.id || null;
 }
 
 async function logSubscriptionEvent(
@@ -430,18 +161,310 @@ async function logSubscriptionEvent(
     oldTier: string | null,
     newTier: string,
     revenueInr: number
-): Promise<void> {
+) {
+    await supabase
+        .from('fact_subscription_events')
+        .insert({
+            user_id: userId,
+            event_type: eventType,
+            old_tier: oldTier,
+            new_tier: newTier,
+            revenue_inr: revenueInr,
+        });
+}
+
+async function handleSubscriptionActivated(supabase: any, payload: any) {
+    const subscription = payload.subscription?.entity;
+    if (!subscription) return;
+
+    const user = await findUserBySubscription(supabase, subscription.id);
+    if (!user) {
+        throw new Error(`No user found for subscription ${subscription.id}`);
+    }
+
+    const internalPlanId = user.plan_id
+        || await resolveInternalPlanId(supabase, subscription.plan_id);
+
+    if (!internalPlanId) {
+        throw new Error(`No internal plan found for Razorpay plan ${subscription.plan_id}`);
+    }
+
+    const now = new Date();
+    const renewsAt = new Date(now);
+    renewsAt.setDate(renewsAt.getDate() + 28);
+
+    const { error } = await supabase
+        .from('user_subscriptions')
+        .upsert({
+            user_id: user.user_id,
+            plan_id: internalPlanId,
+            status: 'active',
+            razorpay_subscription_id: subscription.id,
+            razorpay_customer_id: subscription.customer_id || null,
+            started_at: now.toISOString(),
+            renews_at: renewsAt.toISOString(),
+            cancelled_at: null,
+            cancel_at_period_end: false,
+            updated_at: now.toISOString(),
+        }, { onConflict: 'user_id' });
+
+    if (error) throw error;
+    await logSubscriptionEvent(supabase, user.user_id, 'subscribe', null, internalPlanId, 0);
+}
+
+async function handleSubscriptionCharged(supabase: any, payload: any) {
+    const subscription = payload.subscription?.entity;
+    const payment = payload.payment?.entity;
+    if (!subscription || !payment?.id) return;
+
+    const user = await findUserBySubscription(supabase, subscription.id);
+    if (!user) {
+        throw new Error(`No user found for subscription ${subscription.id}`);
+    }
+
+    const internalPlanId = user.plan_id
+        || await resolveInternalPlanId(supabase, subscription.plan_id);
+
+    if (!internalPlanId) {
+        throw new Error(`No internal plan found for Razorpay plan ${subscription.plan_id}`);
+    }
+
+    const { data, error } = await supabase.rpc('verify_razorpay_payment', {
+        p_user_id: user.user_id,
+        p_order_id: subscription.id,
+        p_payment_id: payment.id,
+        p_signature: '',
+        p_plan_id: internalPlanId,
+        p_type: 'subscription',
+        p_subscription_id: subscription.id,
+        p_payload: { payment, subscription, source: 'webhook' },
+    });
+
+    if (error) throw error;
+
+    await supabase
+        .from('billing_payment_intents')
+        .update({
+            status: 'completed',
+            provider_payment_id: payment.id,
+            completed_at: new Date().toISOString(),
+        })
+        .eq('provider', 'razorpay')
+        .eq('provider_subscription_id', subscription.id)
+        .eq('user_id', user.user_id);
+
+    const amountInr = payment.amount ? Math.round(payment.amount / 100) : 0;
+    if (!data?.duplicate) {
+        await logSubscriptionEvent(supabase, user.user_id, 'renew', internalPlanId, internalPlanId, amountInr);
+    }
+}
+
+async function handlePaymentCaptured(supabase: any, payload: any) {
+    const payment = payload.payment?.entity;
+    if (!payment?.order_id || !payment?.id) return;
+
+    const { data: purchase } = await supabase
+        .from('credit_purchases')
+        .select('id, user_id, pack_id, amount_inr, status')
+        .eq('razorpay_order_id', payment.order_id)
+        .maybeSingle();
+
+    if (!purchase || purchase.status === 'completed') return;
+    if (payment.amount !== Number(purchase.amount_inr) * 100 || payment.currency !== 'INR') {
+        throw new Error(`Captured payment amount mismatch for order ${payment.order_id}`);
+    }
+
+    const { error } = await supabase.rpc('verify_razorpay_payment', {
+        p_user_id: purchase.user_id,
+        p_order_id: payment.order_id,
+        p_payment_id: payment.id,
+        p_signature: '',
+        p_plan_id: purchase.pack_id,
+        p_type: 'pack',
+        p_subscription_id: null,
+        p_payload: { payment, source: 'webhook' },
+    });
+
+    if (error) throw error;
+
+    await supabase
+        .from('credit_purchases')
+        .update({
+            status: 'completed',
+            razorpay_payment_id: payment.id,
+        })
+        .eq('id', purchase.id);
+
+    await supabase
+        .from('billing_payment_intents')
+        .update({
+            status: 'completed',
+            provider_payment_id: payment.id,
+            completed_at: new Date().toISOString(),
+        })
+        .eq('provider', 'razorpay')
+        .eq('provider_order_id', payment.order_id)
+        .eq('user_id', purchase.user_id);
+}
+
+async function handleSubscriptionCancelled(supabase: any, payload: any) {
+    const subscription = payload.subscription?.entity;
+    if (!subscription) return;
+
+    const user = await findUserBySubscription(supabase, subscription.id);
+    if (!user) return;
+
+    const { error } = await supabase
+        .from('user_subscriptions')
+        .update({
+            status: 'cancelled',
+            plan_id: 'free',
+            razorpay_subscription_id: null,
+            cancel_at_period_end: false,
+            cancelled_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.user_id);
+
+    if (error) throw error;
+    await logSubscriptionEvent(supabase, user.user_id, 'cancel', user.plan_id, 'free', 0);
+}
+
+async function handleSubscriptionCompleted(supabase: any, payload: any) {
+    const subscription = payload.subscription?.entity;
+    if (!subscription) return;
+
+    const user = await findUserBySubscription(supabase, subscription.id);
+    if (!user) return;
+
+    const { error } = await supabase
+        .from('user_subscriptions')
+        .update({
+            status: 'expired',
+            plan_id: 'free',
+            razorpay_subscription_id: null,
+            cancel_at_period_end: false,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.user_id);
+
+    if (error) throw error;
+    await logSubscriptionEvent(supabase, user.user_id, 'downgrade', user.plan_id, 'free', 0);
+}
+
+async function handleSubscriptionState(supabase: any, payload: any, status: string) {
+    const subscription = payload.subscription?.entity;
+    if (!subscription) return;
+
+    const user = await findUserBySubscription(supabase, subscription.id);
+    if (!user) return;
+
+    const { error } = await supabase
+        .from('user_subscriptions')
+        .update({
+            status,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', user.user_id);
+
+    if (error) throw error;
+}
+
+async function handlePaymentFailed(supabase: any, payload: any) {
+    const payment = payload.payment?.entity;
+    if (!payment?.subscription_id) return;
+
+    const user = await findUserBySubscription(supabase, payment.subscription_id);
+    if (!user) return;
+
+    await supabase
+        .from('fact_subscription_events')
+        .insert({
+            user_id: user.user_id,
+            event_type: 'cancel',
+            old_tier: user.plan_id,
+            new_tier: user.plan_id,
+            revenue_inr: 0,
+            payment_method: `failed:${payment.error_code || 'unknown'}`,
+        });
+}
+
+async function processWebhookEvent(supabase: any, eventType: string, payload: any) {
+    switch (eventType) {
+        case 'payment.captured':
+            await handlePaymentCaptured(supabase, payload);
+            break;
+        case 'subscription.activated':
+            await handleSubscriptionActivated(supabase, payload);
+            break;
+        case 'subscription.charged':
+            await handleSubscriptionCharged(supabase, payload);
+            break;
+        case 'subscription.cancelled':
+            await handleSubscriptionCancelled(supabase, payload);
+            break;
+        case 'subscription.completed':
+            await handleSubscriptionCompleted(supabase, payload);
+            break;
+        case 'subscription.halted':
+            await handleSubscriptionState(supabase, payload, 'halted');
+            break;
+        case 'subscription.pending':
+            await handleSubscriptionState(supabase, payload, 'pending');
+            break;
+        case 'payment.failed':
+            await handlePaymentFailed(supabase, payload);
+            break;
+        default:
+            break;
+    }
+}
+
+export default async function handler(req: any, res: any) {
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const signature = req.headers['x-razorpay-signature'];
+    if (!signature || typeof signature !== 'string') {
+        return res.status(400).json({ error: 'Missing signature' });
+    }
+
+    let eventId: string | null = null;
+    let supabase: any = null;
+
     try {
-        await supabase
-            .from('fact_subscription_events')
-            .insert({
-                user_id: userId,
-                event_type: eventType,
-                old_tier: oldTier,
-                new_tier: newTier,
-                revenue_inr: revenueInr,
-            });
+        supabase = getSupabaseAdminClient();
+        const rawBody = await readRawBody(req);
+        verifyWebhookSignature(rawBody, signature);
+
+        const event = JSON.parse(rawBody);
+        const eventType = event?.event;
+        const payload = event?.payload;
+
+        if (!eventType || !payload) {
+            return res.status(400).json({ error: 'Invalid webhook payload' });
+        }
+
+        const eventKey = getWebhookEventKey(req, event);
+        const webhookEvent = await beginWebhookEvent(supabase, eventKey, eventType, event);
+        eventId = webhookEvent.id;
+
+        if (webhookEvent.duplicate) {
+            return res.status(200).json({ status: 'duplicate', event: eventType });
+        }
+
+        await processWebhookEvent(supabase, eventType, payload);
+        await markWebhookEvent(supabase, eventId, 'processed');
+
+        return res.status(200).json({ status: 'ok', event: eventType });
     } catch (error) {
-        console.warn('Failed to log subscription event:', error);
+        console.error('Razorpay webhook error:', error);
+        if (eventId && supabase) {
+            await markWebhookEvent(supabase, eventId, 'failed', error instanceof Error ? error.message : 'unknown');
+        }
+        return res.status(getErrorStatus(error)).json({
+            error: getErrorMessage(error, 'Webhook processing failed'),
+        });
     }
 }

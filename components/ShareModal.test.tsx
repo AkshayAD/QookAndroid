@@ -80,7 +80,7 @@ describe('ShareModal', () => {
           prepAhead: { forLunch: 'Rajma bhigoen' },
         },
       ],
-    });
+    } as never);
 
     render(
       <ShareModal

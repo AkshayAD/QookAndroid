@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/validate-env.mjs web",
     "build": "vite build",
+    "prebuild:android": "node scripts/validate-env.mjs android",
     "build:android": "vite build --base ./",
     "preview": "vite preview",
     "android": "npm run build:android && npx cap sync android && npx cap run android",

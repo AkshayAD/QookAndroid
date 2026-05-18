@@ -1,104 +1,114 @@
-import Razorpay from 'razorpay';
-import { createClient } from '@supabase/supabase-js';
-import { authenticateSupabaseUser } from '../lib/supabaseAuth';
+import {
+    assertRequestUser,
+    getErrorMessage,
+    getErrorStatus,
+    getSupabaseAdminClient,
+    requireAuthenticatedUser,
+} from '../lib/serverApi';
+import { createRazorpayClient, getRazorpayKeyId } from '../lib/razorpaySecurity';
 
-export default async function handler(req, res) {
+function getAllowedSubscriptionAmounts(plan: any): number[] {
+    return Array.from(new Set([
+        Number(plan.first_month_price ?? 0),
+        Number(plan.regular_price ?? 0),
+        Number(plan.price_inr ?? 0),
+    ].filter((amount) => amount > 0)));
+}
+
+export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const {
-        plan_id,                    // Razorpay plan ID
-        internal_plan_id,           // Internal plan ID (e.g., 'basic', 'pro') to look up offer
-        user_id,                    // User ID (validated against auth token)
-        total_count = 120,          // Default 10 years (120 months)
-        offer_id: providedOfferId,  // Optional: Override offer ID
-        apply_first_month_discount = true // Whether to apply first-month discount offer
-    } = req.body;
-
-    if (!plan_id) {
-        return res.status(400).json({ error: 'Missing plan_id' });
-    }
-
     try {
-        // Initialize Supabase client for server-side
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const authUserId = await requireAuthenticatedUser(req.headers.authorization);
+        const userId = assertRequestUser(authUserId, req.body?.user_id || req.body?.userId);
+        const internalPlanId = req.body?.internal_plan_id || req.body?.internalPlanId || req.body?.plan_id;
+        const totalCount = Number(req.body?.total_count || 120);
+        const applyFirstMonthDiscount = req.body?.apply_first_month_discount !== false;
 
-        // Auth validation: verify the caller is the user themselves
-        if (user_id) {
-            const { userId: authUserId } = await authenticateSupabaseUser(req.headers.authorization);
-            if (authUserId && authUserId !== user_id) {
-                return res.status(403).json({ error: 'Cannot create subscription for another user' });
-            }
+        if (!internalPlanId) {
+            return res.status(400).json({ error: 'internal_plan_id is required' });
         }
 
-        let offerId = providedOfferId;
+        const supabase = getSupabaseAdminClient();
+        const { data: plan, error: planError } = await supabase
+            .from('subscription_plans')
+            .select('id, name, price_inr, first_month_price, regular_price, monthly_credits, razorpay_plan_id, razorpay_offer_id, razorpay_upi_offer_id, is_active')
+            .eq('id', internalPlanId)
+            .eq('is_active', true)
+            .single();
 
-        // If internal_plan_id provided and no override, fetch offer_id from database
-        // Try both razorpay_offer_id (card) and razorpay_upi_offer_id (UPI)
-        if (internal_plan_id && !providedOfferId && apply_first_month_discount) {
-            if (supabaseUrl && supabaseServiceKey) {
-                const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-                const { data: planData, error: planError } = await supabase
-                    .from('subscription_plans')
-                    .select('razorpay_offer_id, razorpay_upi_offer_id')
-                    .eq('id', internal_plan_id)
-                    .single();
-
-                if (!planError && planData) {
-                    // Prefer the general offer; UPI offer can be applied at checkout level
-                    offerId = planData.razorpay_offer_id || planData.razorpay_upi_offer_id;
-                    if (offerId) {
-                        console.log(`Applying offer ${offerId} for plan ${internal_plan_id}`);
-                    }
-                }
-            }
+        if (planError || !plan) {
+            return res.status(404).json({ error: 'Subscription plan not found' });
         }
 
-        // Initialize Razorpay
-        const razorpay = new Razorpay({
-            key_id: process.env.VITE_RAZORPAY_KEY_ID,
-            key_secret: process.env.RAZORPAY_KEY_SECRET,
-        });
+        if (!plan.razorpay_plan_id) {
+            return res.status(400).json({ error: 'Subscription plan is not configured for Razorpay' });
+        }
 
-        // Build subscription options
+        const offerId = applyFirstMonthDiscount
+            ? plan.razorpay_offer_id || plan.razorpay_upi_offer_id || null
+            : null;
+
+        const razorpay = createRazorpayClient();
         const subscriptionOptions: any = {
-            plan_id,
-            total_count,
+            plan_id: plan.razorpay_plan_id,
+            total_count: Number.isFinite(totalCount) && totalCount > 0 ? totalCount : 120,
             quantity: 1,
             customer_notify: 1,
+            notes: {
+                user_id: userId,
+                internal_plan_id: plan.id,
+                type: 'subscription',
+            },
         };
 
-        // Apply Razorpay offer if available (for first-month discount)
-        // Razorpay only supports single offer_id per subscription
         if (offerId) {
             subscriptionOptions.offer_id = offerId;
-            console.log('Creating subscription with offer:', offerId);
         }
 
         const subscription = await razorpay.subscriptions.create(subscriptionOptions);
+        const allowedAmounts = getAllowedSubscriptionAmounts(plan);
+        const intendedAmount = allowedAmounts[0] || Number(plan.price_inr || 0);
 
-        // Save the razorpay_subscription_id to the database immediately
-        // This ensures we can track it even if the client-side callback fails
-        if (user_id && supabaseUrl && supabaseServiceKey) {
-            const supabase = createClient(supabaseUrl, supabaseServiceKey);
-            await supabase
-                .from('user_subscriptions')
-                .update({
-                    razorpay_subscription_id: subscription.id,
-                    updated_at: new Date().toISOString(),
-                })
-                .eq('user_id', user_id);
-        }
+        await supabase
+            .from('billing_payment_intents')
+            .insert({
+                provider: 'razorpay',
+                user_id: userId,
+                item_type: 'subscription',
+                item_id: plan.id,
+                amount_inr: intendedAmount,
+                currency: 'INR',
+                status: 'pending',
+                provider_subscription_id: subscription.id,
+                provider_plan_id: plan.razorpay_plan_id,
+                metadata: {
+                    offer_id: offerId,
+                    allowed_amounts_inr: allowedAmounts,
+                },
+            });
+
+        await supabase
+            .from('user_subscriptions')
+            .update({
+                razorpay_subscription_id: subscription.id,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('user_id', userId);
 
         return res.status(200).json({
             ...subscription,
-            offer_applied: !!offerId
+            key_id: getRazorpayKeyId(),
+            subscription_id: subscription.id,
+            internal_plan_id: plan.id,
+            offer_applied: Boolean(offerId),
         });
     } catch (error) {
-        console.error('Error creating subscription:', error);
-        return res.status(500).json({ error: 'Failed to create subscription', details: error.message });
+        console.error('Error creating Razorpay subscription:', error);
+        return res.status(getErrorStatus(error)).json({
+            error: getErrorMessage(error, 'Failed to create subscription'),
+        });
     }
 }
