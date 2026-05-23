@@ -33,3 +33,25 @@ analysis/
 *.njsproj
 *.sln
 *.sw?
+
+# Untracked debug captures in artifacts/
+artifacts/manual-demo-*
+artifacts/manual-emulator-*
+artifacts/manual-final-*
+artifacts/emulator-*
+artifacts/login-after-*
+artifacts/cold-launch-*
+artifacts/phone-test-apk/
+artifacts/play-release/
+artifacts/qa-*/
+artifacts/*.xml
+artifacts/*.png
+artifacts/*.jpg
+artifacts/*.txt
+!artifacts/payment-audit-*/
+
+# Lockfile for unused package manager
+pnpm-lock.yaml
+
+# Optional scratch dir for local captures
+.local/
