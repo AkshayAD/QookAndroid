@@ -3,25 +3,30 @@
 When working on specific domains, consult the linked documentation before proceeding if needed.
 
 - **Architecture & Database**
-  - [Technical Architecture](docs/TECHNICAL_ARCHITECTURE.md)
-  - [Database Schema](docs/DATABASE_SCHEMA.md)
-  - [Family Mode Architecture](documentation/FAMILY_MODE_ARCHITECTURE.md)
+  - [Technical Architecture](docs/architecture/TECHNICAL_ARCHITECTURE.md)
+  - [Database Schema](docs/database/DATABASE_SCHEMA.md)
+  - [Family Mode Architecture](docs/architecture/FAMILY_MODE_ARCHITECTURE.md)
 
 - **APIs & Setup**
-  - [API Reference](docs/API_REFERENCE.md)
-  - [Environment Setup](docs/ENVIRONMENT_SETUP.md)
-  - [Razorpay Setup](docs/RAZORPAY_SETUP.md)
+  - [API Reference](docs/api/API_REFERENCE.md)
+  - [Environment Setup](docs/deployment/ENVIRONMENT_SETUP.md)
+  - [Razorpay Setup](docs/payments/RAZORPAY_SETUP.md)
+  - [Razorpay First-Month Discount](docs/payments/RAZORPAY_SETUP_GUIDE.md)
 
 - **Core Features & Logic**
-  - [Credit System](docs/CREDIT_SYSTEM.md)
-  - [Referral System](docs/REFERRAL_SYSTEM.md)
-  - [Pricing & Subscriptions](docs/PRICING_AND_SUBSCRIPTIONS.md)
-  - [Family Mode Specs](documentation/FAMILY_MODE_SPECIFICATION.md)
-  - [Recipe Approach](documentation/RECIPE_APPROACH.md)
-  - [Regenerate Analysis](docs/REGENERATE_ANALYSIS.md)
+  - [Credit System](docs/payments/CREDIT_SYSTEM.md)
+  - [Referral System](docs/payments/REFERRAL_SYSTEM.md)
+  - [Pricing & Subscriptions](docs/payments/PRICING_AND_SUBSCRIPTIONS.md)
+  - [Cancellation & Account](docs/payments/CANCELLATION_AND_ACCOUNT.md)
+  - [Family Mode Specs](docs/features/FAMILY_MODE_SPECIFICATION.md)
+  - [Family Mode Planning](docs/features/FAMILY_MODE_PLANNING.md)
+  - [Recipe Approach](docs/features/RECIPE_APPROACH.md)
+  - [Regenerate Analysis](docs/features/REGENERATE_ANALYSIS.md)
+  - [Grocery & Nutrition Analysis](docs/features/GROCERY_NUTRITION_ANALYSIS.md)
 
 - **Deployment**
   - [Deployment Status](DEPLOYMENT_STATUS.md) ← **read this before any production deployment**
+  - [Environment Setup](docs/deployment/ENVIRONMENT_SETUP.md)
 
 ---
 
