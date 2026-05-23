@@ -61,3 +61,7 @@ pnpm-lock.yaml
 
 # Workspace-level planning documents
 CLEANUP_PLAN.md
+
+# Marketing assets — untracked 2026-05-23; blobs remain in past history
+# (run git filter-repo separately if history rewrite is ever needed)
+QookCommander Marketing/
