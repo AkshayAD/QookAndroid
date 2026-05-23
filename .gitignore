@@ -55,3 +55,9 @@ pnpm-lock.yaml
 
 # Optional scratch dir for local captures
 .local/
+
+# Gradle wrapper cache (machine-local)
+.gradle-user/
+
+# Workspace-level planning documents
+CLEANUP_PLAN.md
