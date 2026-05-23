@@ -34,21 +34,6 @@ const getSupabaseAdmin = () => {
     );
 };
 
-// Get user's tier to determine model
-async function getUserTier(userId: string): Promise<string> {
-    try {
-        const supabase = getSupabaseAdmin();
-        const { data } = await supabase
-            .from('users')
-            .select('subscription_tier')
-            .eq('id', userId)
-            .single();
-        return data?.subscription_tier || 'free';
-    } catch {
-        return 'free';
-    }
-}
-
 // Get household settings from user_settings table
 async function getHouseholdSettings(userId: string): Promise<any> {
     try {
@@ -457,8 +442,7 @@ export default async function handler(req: Request) {
         }
 
         const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-        const tier = await getUserTier(userId);
-        const isPro = tier === 'pro' || tier === 'enterprise';
+        const isPro = subscription?.plan_id === 'pro';
         const model = isPro ? "gemini-3-pro-preview" : "gemini-3-flash-preview";
 
         // Fetch household settings and merge with profile preferences
