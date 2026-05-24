@@ -53,7 +53,35 @@ This is the #1 source of production failures. See `DEPLOYMENT_STATUS.md` for the
 | `origin` | `AkshayAD/QookAndroid` (public) | Local dev record. Does **not** deploy. |
 | `vercel_origin` | `AkshayAD/QookCommander` (private) | **Vercel watches this. Pushes here deploy www.qook.in.** |
 
-The two `main` branches have **diverged ~150 commits**. **Never** run `git push vercel_origin main:main` — it will destroy QookCommander history. To deploy, cherry-pick / re-apply changes onto a branch cut from `vercel_origin/main` and push that branch to `vercel_origin/main`.
+The two `main` branches have **diverged ~200 commits**. **Never** run `git push vercel_origin main:main` — it will destroy QookCommander history. To deploy, cherry-pick / re-apply changes onto a branch cut from `vercel_origin/main` and push that branch to `vercel_origin/main`.
+
+### 🔴 CRITICAL GUARDRAIL — Two independent histories, one shared codebase
+
+`origin/main` (QookAndroid) and `vercel_origin/main` (QookCommander) are **NOT the same lineage**. They share source code but have entirely separate git histories and cannot be fast-forwarded into each other.
+
+**What this means in practice:**
+
+- `vercel_origin/main` is the **production branch**. Vercel deploys www.qook.in from it. It holds ~200 commits of production history that exist nowhere else.
+- **NEVER** force-push, non-fast-forward push, `reset --hard`, or rewrite `vercel_origin/main`. Doing so permanently destroys production history with no recovery path (the backup below is the only safety net).
+- **NEVER** run `git push vercel_origin main` or `git push vercel_origin main:main` without first verifying it is a fast-forward. A non-fast-forward push will be silently rejected unless `--force` is added — if you ever find yourself reaching for `--force` on `vercel_origin/main`, **STOP**.
+
+**To ship a change to production (www.qook.in):**
+1. `git fetch vercel_origin`
+2. `git checkout -b fix/my-change vercel_origin/main` — branch OFF vercel_origin/main, not local main
+3. Cherry-pick or re-implement the change on that branch
+4. `git push vercel_origin fix/my-change`
+5. Open a PR against `vercel_origin/main` — the merge triggers the Vercel deploy
+6. Review the diff in the PR before merging; merging is the deploy
+
+**Before any push to either remote's main:**
+```bash
+git fetch origin && git fetch vercel_origin
+# confirm local main is a fast-forward of origin/main:
+git log --oneline origin/main..main   # should be empty or only your new commits
+# NEVER push to vercel_origin/main directly — always via PR from a branch
+```
+
+**Recovery backup:** A full repo backup (all files + git history as of 2026-05-23) exists at `D:\Projects\Qook-Android-backup-2026-05-23`. Do not delete it until both remotes are confirmed stable.
 
 ## Architecture
 
