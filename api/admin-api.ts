@@ -1,4 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import {
+    assertRequestUser,
+    getErrorMessage,
+    getErrorStatus,
+    requireAuthenticatedUser,
+} from '../lib/serverApi';
 
 const DEFAULT_FEATURE_TIERS: Record<string, string[]> = {
     meal_generation: ['free', 'basic', 'pro', 'family_pro', 'byok'],
@@ -31,7 +37,7 @@ const DEFAULT_FEATURE_TIERS: Record<string, string[]> = {
 
 interface AdminAction {
     action: string;
-    userId: string;
+    userId?: string;
     payload?: any;
 }
 
@@ -121,25 +127,28 @@ export default async function handler(req: any, res: any) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { action, userId, payload } = req.body as AdminAction;
+    const { action, userId: requestedUserId, payload } = req.body as AdminAction;
 
-    if (!action || !userId) {
-        return res.status(400).json({ error: 'Missing action or userId' });
+    if (!action) {
+        return res.status(400).json({ error: 'Missing action' });
     }
-
-    // Initialize Supabase with service role key for admin operations
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-        return res.status(500).json({ error: 'Server configuration error' });
-    }
-
-    const supabase: any = createClient(supabaseUrl, supabaseServiceKey);
 
     try {
+        const authUserId = await requireAuthenticatedUser(req.headers.authorization);
+        const adminUserId = assertRequestUser(authUserId, requestedUserId);
+
+        // Initialize Supabase with service role key for admin operations
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+        if (!supabaseUrl || !supabaseServiceKey) {
+            return res.status(500).json({ error: 'Server configuration error' });
+        }
+
+        const supabase: any = createClient(supabaseUrl, supabaseServiceKey);
+
         // Step 1: Verify the user is an admin
-        const { data: userData } = await supabase.auth.admin.getUserById(userId);
+        const { data: userData } = await supabase.auth.admin.getUserById(adminUserId);
         if (!userData?.user?.email) {
             return res.status(401).json({ error: 'Invalid user' });
         }
@@ -172,16 +181,16 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'modify_credits':
-                result = await modifyCredits(supabase, userId, adminEmail, payload);
+                result = await modifyCredits(supabase, adminUserId, adminEmail, payload);
                 break;
 
             case 'reset_account':
                 // Allow all admins to reset accounts (was super_admin only)
-                result = await resetAccount(supabase, userId, adminEmail, payload.targetUserId);
+                result = await resetAccount(supabase, adminUserId, adminEmail, payload.targetUserId);
                 break;
 
             case 'block_user':
-                result = await blockUser(supabase, userId, payload.targetUserId, payload.reason);
+                result = await blockUser(supabase, adminUserId, payload.targetUserId, payload.reason);
                 break;
 
             case 'unblock_user':
@@ -192,7 +201,7 @@ export default async function handler(req: any, res: any) {
                 if (adminRecord.role !== 'super_admin') {
                     return res.status(403).json({ error: 'Super admin required to add admins' });
                 }
-                result = await addAdmin(supabase, userId, payload.email, payload.role);
+                result = await addAdmin(supabase, adminUserId, payload.email, payload.role);
                 break;
 
             case 'remove_admin':
@@ -222,7 +231,7 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'reset_test_user':
-                result = await resetTestUser(supabase, userId, adminEmail, payload.email, payload.tier);
+                result = await resetTestUser(supabase, adminUserId, adminEmail, payload.email, payload.tier);
                 break;
 
             case 'list_admins':
@@ -234,7 +243,7 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'create_template':
-                result = await createTemplate(supabase, userId, payload);
+                result = await createTemplate(supabase, adminUserId, payload);
                 break;
 
             case 'delete_template':
@@ -255,7 +264,7 @@ export default async function handler(req: any, res: any) {
 
             case 'delete_user':
                 // Allow all admins to delete users (was super_admin only)
-                result = await deleteUser(supabase, userId, adminEmail, payload.targetUserId);
+                result = await deleteUser(supabase, adminUserId, adminEmail, payload.targetUserId);
                 break;
 
             case 'get_admin_history':
@@ -271,11 +280,11 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'change_tier':
-                result = await changeTier(supabase, userId, adminEmail, payload.targetUserId, payload.newTier);
+                result = await changeTier(supabase, adminUserId, adminEmail, payload.targetUserId, payload.newTier);
                 break;
 
             case 'cancel_razorpay':
-                result = await cancelRazorpaySubscription(supabase, userId, adminEmail, payload.targetUserId);
+                result = await cancelRazorpaySubscription(supabase, adminUserId, adminEmail, payload.targetUserId);
                 break;
 
             // Feature Matrix Management
@@ -284,7 +293,7 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'update_feature_access':
-                result = await updateFeatureAccess(supabase, userId, payload.featureId, payload.tierId, payload.enabled);
+                result = await updateFeatureAccess(supabase, adminUserId, payload.featureId, payload.tierId, payload.enabled);
                 break;
 
             case 'get_subscription_plans':
@@ -297,12 +306,12 @@ export default async function handler(req: any, res: any) {
                 break;
 
             case 'update_launch_offer':
-                result = await updateLaunchOffer(supabase, userId, payload);
+                result = await updateLaunchOffer(supabase, adminUserId, payload);
                 break;
 
             // Admin Notifications to Users
             case 'send_notification':
-                result = await sendNotification(supabase, userId, adminEmail, payload);
+                result = await sendNotification(supabase, adminUserId, adminEmail, payload);
                 break;
 
             case 'list_notifications':
@@ -321,7 +330,11 @@ export default async function handler(req: any, res: any) {
 
     } catch (error: any) {
         console.error('Admin API error:', error);
-        return res.status(500).json({ error: 'Admin operation failed', details: error.message });
+        const status = getErrorStatus(error);
+        return res.status(status).json({
+            error: getErrorMessage(error, 'Admin operation failed'),
+            ...(status === 500 && error?.message ? { details: error.message } : {}),
+        });
     }
 }
 

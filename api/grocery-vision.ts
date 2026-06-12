@@ -1,5 +1,13 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { createClient } from '@supabase/supabase-js';
+import { GoogleGenAI } from "@google/genai";
+import {
+    ApiError,
+    assertRequestUser,
+    edgeCorsHeaders,
+    getErrorMessage,
+    getErrorStatus,
+    getSupabaseAdminClient,
+    requireAuthenticatedUser,
+} from '../lib/serverApi';
 
 /**
  * Grocery Vision API
@@ -13,44 +21,92 @@ export const config = {
     maxDuration: 30,
 };
 
-// Initialize Supabase admin client
-const getSupabaseAdmin = () => {
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    return createClient(supabaseUrl, supabaseServiceKey);
-};
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+]);
+
+function normalizeImageType(imageType: unknown): string {
+    const normalized = String(imageType || 'image/jpeg').trim().toLowerCase();
+    return normalized === 'image/jpg' ? 'image/jpeg' : normalized;
+}
+
+function extractBase64Image(imageData: unknown): string {
+    return String(imageData || '').replace(/^data:[^,]*,/i, '').replace(/\s/g, '');
+}
+
+function estimateBase64Bytes(base64Data: string): number {
+    const padding = base64Data.endsWith('==') ? 2 : base64Data.endsWith('=') ? 1 : 0;
+    return Math.floor((base64Data.length * 3) / 4) - padding;
+}
+
+async function assertGroceryVisionRateLimit(userId: string) {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase.rpc('check_rate_limit', {
+        p_user_id: userId,
+        p_action_type: 'grocery_vision',
+        p_window_minutes: 1,
+        p_max_requests: 8,
+    });
+
+    if (error) {
+        console.error('Grocery vision rate limit check failed:', error);
+        throw new ApiError(500, 'Unable to verify request limits');
+    }
+
+    if (data !== true) {
+        throw new ApiError(429, 'Too many image analysis requests. Please try again shortly.');
+    }
+}
 
 export default async function handler(req: Request) {
+    const corsHeaders = edgeCorsHeaders(req);
+
+    if (req.method === 'OPTIONS') {
+        return new Response(null, { status: 200, headers: corsHeaders });
+    }
+
     if (req.method !== 'POST') {
         return new Response(JSON.stringify({ error: 'Method not allowed' }), {
             status: 405,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
 
     try {
+        const authUserId = await requireAuthenticatedUser(req.headers.get('authorization'));
         const body = await req.json();
-        const { userId, imageData, imageType = 'image/jpeg', userApiKey } = body;
+        const { userId: requestedUserId, imageData, imageType = 'image/jpeg', userApiKey } = body;
+        const userId = assertRequestUser(authUserId, requestedUserId);
+        const normalizedImageType = normalizeImageType(imageType);
+        const base64ImageData = extractBase64Image(imageData);
 
-        if (!userId) {
-            return new Response(JSON.stringify({ error: 'Missing userId' }), {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        if (!imageData) {
+        if (!base64ImageData) {
             return new Response(JSON.stringify({ error: 'Missing imageData (base64)' }), {
                 status: 400,
-                headers: { 'Content-Type': 'application/json' }
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
+
+        if (!ALLOWED_IMAGE_TYPES.has(normalizedImageType)) {
+            throw new ApiError(415, 'Unsupported image type');
+        }
+
+        if (estimateBase64Bytes(base64ImageData) > MAX_IMAGE_BYTES) {
+            throw new ApiError(413, 'Image is too large');
+        }
+
+        await assertGroceryVisionRateLimit(userId);
 
         const geminiApiKey = userApiKey || process.env.GEMINI_API_KEY || '';
         if (!geminiApiKey) {
             return new Response(JSON.stringify({ error: 'No API key configured' }), {
                 status: 500,
-                headers: { 'Content-Type': 'application/json' }
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             });
         }
 
@@ -97,8 +153,8 @@ Return ONLY a JSON response in this exact format:
                         { text: prompt },
                         {
                             inlineData: {
-                                mimeType: imageType,
-                                data: imageData // base64 encoded
+                                mimeType: normalizedImageType,
+                                data: base64ImageData // base64 encoded
                             }
                         }
                     ]
@@ -130,8 +186,8 @@ Return ONLY a JSON response in this exact format:
             ...result
         }), {
             headers: {
+                ...corsHeaders,
                 'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
             }
         });
 
@@ -139,10 +195,10 @@ Return ONLY a JSON response in this exact format:
         console.error('Grocery vision error:', error);
         return new Response(JSON.stringify({
             success: false,
-            error: error.message || 'Failed to process image'
+            error: getErrorMessage(error, 'Failed to process image')
         }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
+            status: getErrorStatus(error),
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
     }
 }

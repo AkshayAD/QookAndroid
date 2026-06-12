@@ -7,6 +7,7 @@ import { ALL_MEAL_TYPES, getMealTypeLabel, type SelectableMealType } from '../li
 import type { SmartEditMealOptions, SmartEditMealUpdates } from '../services/aiProxyService';
 import { getApiBaseUrl } from '../utils/platform';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
 
 interface Props {
   dayPlan: DayPlan;
@@ -77,9 +78,9 @@ const SmartEditModal: React.FC<Props> = ({
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await getAuthenticatedJsonHeaders(),
         body: JSON.stringify({
-          userId: user?.id || 'anonymous',
+          userId: user?.id,
           imageData,
           imageType: `image/${format}`,
         }),

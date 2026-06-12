@@ -1,13 +1,11 @@
+# The live DB migration history has drifted from this repo's migrations directory:
+# two unrelated repo lineages plus migrations applied out-of-band.
+# Run `supabase db push` only manually after reconciling history with
+# `supabase migration list --linked` and `supabase migration repair`.
+
 name: Deploy Supabase
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'supabase/migrations/**'
-      - 'supabase/functions/**'
-      - '.github/workflows/supabase-deploy.yml'
   workflow_dispatch:
 
 jobs:
@@ -33,10 +31,4 @@ jobs:
         run: supabase db push
 
       - name: Deploy Edge Functions
-        run: |
-          if [ -d "supabase/functions" ] && [ "$(ls -A supabase/functions)" ]; then
-            # Adding a check just in case, but typically supabase functions deploy --all works
-            # We will use individual deploys or just echo for now since project-ref might require linking
-            echo "Functions deployment can be enabled here if needed."
-            # supabase functions deploy
-          fi
+        run: supabase functions deploy recipe-search --project-ref $SUPABASE_PROJECT_ID

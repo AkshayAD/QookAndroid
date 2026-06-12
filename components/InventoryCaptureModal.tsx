@@ -3,6 +3,7 @@ import { Camera, ImagePlus, Loader2, Package2, Plus, Sparkles, Trash2, Upload, X
 import { Camera as CapacitorCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { InventoryItem, InventorySource } from '../types';
 import { getApiBaseUrl, isNative } from '../utils/platform';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
 
 interface DraftInventoryItem {
     name: string;
@@ -79,7 +80,7 @@ export default function InventoryCaptureModal({
         try {
             const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: await getAuthenticatedJsonHeaders(),
                 body: JSON.stringify({
                     imageData: base64Data,
                     imageType,

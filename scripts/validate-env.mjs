@@ -1,4 +1,6 @@
-const target = process.argv[2] || 'web';
+const args = process.argv.slice(2);
+const isServer = args.includes('--server');
+const target = isServer ? 'server' : (process.argv[2] || 'web').replace(/^--/, '');
 
 const required = [
   'VITE_SUPABASE_URL',
@@ -6,7 +8,7 @@ const required = [
   'VITE_RAZORPAY_KEY_ID',
 ];
 
-if (target === 'server' || process.env.CI || process.env.VERCEL) {
+if (isServer) {
   required.push(
     'SUPABASE_SERVICE_ROLE_KEY',
     'RAZORPAY_KEY_SECRET',

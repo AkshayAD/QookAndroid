@@ -292,54 +292,6 @@ async function getFallbackPersonalCreditSummary(userId: string): Promise<UserCre
     };
 }
 
-async function grantCredits(
-    userId: string,
-    credits: number,
-    creditType: string,
-    expiresAt: string | null,
-    description: string,
-    familyGroupId: string | null = null
-): Promise<void> {
-    if (!supabase || credits <= 0) {
-        return;
-    }
-
-    const { error } = await supabase.rpc('grant_credits', {
-        p_user_id: userId,
-        p_credits: credits,
-        p_credit_type: creditType,
-        p_expires_at: expiresAt,
-        p_description: description,
-        p_family_group_id: familyGroupId,
-        p_metadata: {},
-    });
-
-    if (error) {
-        console.error('Error granting credits via RPC:', error);
-        throw error;
-    }
-}
-
-async function getActiveFamilyGroupId(userId: string): Promise<string | null> {
-    if (!supabase) {
-        return null;
-    }
-
-    const { data, error } = await supabase
-        .from('family_group_members')
-        .select('group_id')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-
-    if (error) {
-        console.warn('Unable to resolve family group for billing grant:', error);
-        return null;
-    }
-
-    return data?.group_id ?? null;
-}
-
 export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
     if (!supabase) {
         return [];
@@ -656,40 +608,15 @@ export async function trackUsage(
     tokensOutput?: number,
     costUsd?: number
 ): Promise<void> {
-    if (!supabase) {
-        return;
-    }
-
-    const { error } = await supabase
-        .from('usage_tracking')
-        .insert({
-            user_id: userId,
-            action_type: actionType,
-            credits_used: creditsUsed,
-            api_source: apiSource,
-            tokens_input: tokensInput,
-            tokens_output: tokensOutput,
-            cost_usd: costUsd,
-        });
-
-    if (error) {
-        console.error('Error tracking usage:', error);
-    }
-
-    try {
-        await supabase
-            .from('fact_generation_events')
-            .insert({
-                user_id: userId,
-                event_type: actionType,
-                tokens_input: tokensInput,
-                tokens_output: tokensOutput,
-                cost_usd: costUsd,
-                credit_source: apiSource,
-            });
-    } catch (analyticsError) {
-        console.warn('Generation analytics insert skipped:', analyticsError);
-    }
+    console.warn('Client-side usage tracking is disabled; server API routes record usage.', {
+        userId,
+        actionType,
+        creditsUsed,
+        apiSource,
+        tokensInput,
+        tokensOutput,
+        costUsd,
+    });
 }
 
 export async function getUsageHistory(userId: string, days: number = 30): Promise<UsageRecord[]> {
@@ -765,83 +692,20 @@ export async function upgradeSubscription(
     planId: string,
     razorpaySubscriptionId?: string
 ): Promise<boolean> {
-    if (!supabase) {
-        return false;
-    }
-
-    const plan = await getSubscriptionPlanById(planId);
-    if (!plan) {
-        return false;
-    }
-
-    const now = new Date();
-    const renewsAt = new Date(now);
-    renewsAt.setDate(renewsAt.getDate() + 28);
-
-    const { error } = await supabase
-        .from('user_subscriptions')
-        .upsert({
-            user_id: userId,
-            plan_id: planId,
-            status: 'active',
-            started_at: now.toISOString(),
-            renews_at: renewsAt.toISOString(),
-            trial_ends_at: null,
-            razorpay_subscription_id: razorpaySubscriptionId || null,
-            updated_at: now.toISOString(),
-        }, { onConflict: 'user_id' });
-
-    if (error) {
-        console.error('Error upgrading subscription:', error);
-        return false;
-    }
-
-    const familyGroupId = planId === 'family_pro' ? await getActiveFamilyGroupId(userId) : null;
-    await grantCredits(
+    console.warn('Direct client subscription upgrades are disabled. Use the Razorpay create/verify payment API flow.', {
         userId,
-        plan.monthly_credits,
-        'plan',
-        renewsAt.toISOString(),
-        `Subscription renewal for ${planId}`,
-        familyGroupId
-    );
-
-    try {
-        await supabase
-            .from('fact_subscription_events')
-            .insert({
-                user_id: userId,
-                event_type: 'subscribe',
-                new_tier: planId,
-                revenue_inr: plan.regular_price ?? plan.price_inr,
-            });
-    } catch (analyticsError) {
-        console.warn('Subscription analytics insert skipped:', analyticsError);
-    }
-
-    return true;
+        planId,
+        razorpaySubscriptionId,
+    });
+    return false;
 }
 
 export async function cancelSubscription(userId: string): Promise<boolean> {
-    if (!supabase) {
-        return false;
+    const result = await cancelSubscriptionAPI(userId);
+    if (!result.success) {
+        console.error('Error cancelling subscription:', result.error);
     }
-
-    const { error } = await supabase
-        .from('user_subscriptions')
-        .update({
-            status: 'cancelled',
-            cancelled_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-        })
-        .eq('user_id', userId);
-
-    if (error) {
-        console.error('Error cancelling subscription:', error);
-        return false;
-    }
-
-    return true;
+    return result.success;
 }
 
 export async function cancelSubscriptionAPI(userId: string): Promise<{ success: boolean; error?: string }> {

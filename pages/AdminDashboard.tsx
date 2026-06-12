@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
 import {
     Users,
     CreditCard,
@@ -26,6 +25,8 @@ import {
     Send
 } from 'lucide-react';
 import { FEATURE_DESCRIPTIONS } from '../lib/billing/featureAccess';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
+import { getApiBaseUrl } from '../utils/platform';
 
 interface User {
     user_id: string;
@@ -80,7 +81,6 @@ interface AggregateInsights {
 }
 
 export default function AdminDashboard() {
-    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'access' | 'test' | 'analytics' | 'templates' | 'history' | 'features' | 'notifications'>('overview');
     const [analytics, setAnalytics] = useState<Analytics | null>(null);
     const [detailedAnalytics, setDetailedAnalytics] = useState<DetailedAnalytics | null>(null);
@@ -115,12 +115,11 @@ export default function AdminDashboard() {
     }, []);
 
     async function adminAPI(action: string, payload?: any) {
-        const response = await fetch('/api/admin-api', {
+        const response = await fetch(`${getApiBaseUrl()}/api/admin-api`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await getAuthenticatedJsonHeaders(),
             body: JSON.stringify({
                 action,
-                userId: user?.id,
                 payload
             })
         });

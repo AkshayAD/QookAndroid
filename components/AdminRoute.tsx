@@ -2,6 +2,7 @@ import { useState, useEffect, ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getApiBaseUrl } from '../utils/platform';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
 
 interface AdminRouteProps {
     children: ReactNode;
@@ -27,10 +28,9 @@ export function AdminRoute({ children }: AdminRouteProps) {
             try {
                 const response = await fetch(`${getApiBaseUrl()}/api/admin-api`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getAuthenticatedJsonHeaders(),
                     body: JSON.stringify({
-                        action: 'check_admin',
-                        userId: user.id
+                        action: 'check_admin'
                     })
                 });
 
@@ -80,12 +80,11 @@ export function useIsAdmin() {
             }
 
             try {
-                const response = await fetch('/api/admin-api', {
+                const response = await fetch(`${getApiBaseUrl()}/api/admin-api`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getAuthenticatedJsonHeaders(),
                     body: JSON.stringify({
-                        action: 'check_admin',
-                        userId: user.id
+                        action: 'check_admin'
                     })
                 });
 

@@ -21,6 +21,10 @@
                 {
                     "key": "X-Content-Type-Options",
                     "value": "nosniff"
+                },
+                {
+                    "key": "Content-Security-Policy",
+                    "value": "default-src 'self'; script-src 'self' https://checkout.razorpay.com https://accounts.google.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://checkout.razorpay.com https://api.razorpay.com https://accounts.google.com https://www.googleapis.com https://*.googleapis.com https://*.vercel-insights.com https://vitals.vercel-insights.com; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://checkout.razorpay.com https://api.razorpay.com https://accounts.google.com; media-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self' https://checkout.razorpay.com https://api.razorpay.com; upgrade-insecure-requests"
                 }
             ]
         }

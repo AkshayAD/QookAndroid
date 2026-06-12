@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import crypto from 'crypto';
 import { authenticateSupabaseUser } from '../lib/supabaseAuth';
 import { createClient } from '@supabase/supabase-js';
-import Razorpay from 'razorpay';
 import createOrder from './create-order';
 import createSubscription from './create-subscription';
 import verifyPayment from './verify-payment';
@@ -16,14 +15,16 @@ vi.mock('@supabase/supabase-js', () => ({
     createClient: vi.fn(),
 }));
 
-const razorpayMock = {
+const razorpayMock = vi.hoisted(() => ({
     orders: { create: vi.fn() },
     subscriptions: { create: vi.fn(), fetch: vi.fn() },
     payments: { fetch: vi.fn() },
-};
+}));
 
 vi.mock('razorpay', () => ({
-    default: vi.fn(() => razorpayMock),
+    default: vi.fn(function Razorpay() {
+        return razorpayMock;
+    }),
 }));
 
 function createReq(body: any, authorization = 'Bearer token') {
@@ -84,7 +85,6 @@ describe('payment API route hardening', () => {
         process.env.VITE_RAZORPAY_KEY_ID = 'rzp_test_public';
         process.env.RAZORPAY_KEY_SECRET = 'test_secret';
         vi.mocked(authenticateSupabaseUser).mockResolvedValue({ userId: 'user-1', token: 'token' });
-        vi.mocked(Razorpay).mockReturnValue(razorpayMock as any);
     });
 
     it('requires auth before creating a credit order', async () => {

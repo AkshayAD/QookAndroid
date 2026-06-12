@@ -3,6 +3,7 @@ import { X, ExternalLink, Eye, Search, Loader2, ChefHat, Heart, Share2, Clock, F
 import YouTubeEmbed from './YouTubeEmbed';
 import { supabase } from '../lib/supabase';
 import { useFamily } from '../contexts/FamilyContext';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
 
 interface StructuredIngredient {
     name: string;
@@ -108,11 +109,12 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen, on
 
             try {
                 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://igcmhlfonulqtxsiiisb.supabase.co';
+                const recipeSearchHeaders = await getAuthenticatedJsonHeaders();
 
                 // 1. Initial Fetch (Video only, skip AI)
                 const response = await fetch(`${SUPABASE_URL}/functions/v1/recipe-search`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: recipeSearchHeaders,
                     body: JSON.stringify({ mealName, skipAi: true }),
                 });
 
@@ -161,7 +163,7 @@ const RecipePanel: React.FC<RecipePanelProps> = ({ mealName, onClose, isOpen, on
                     try {
                         const detailsResponse = await fetch(`${SUPABASE_URL}/functions/v1/recipe-search`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: recipeSearchHeaders,
                             body: JSON.stringify({ mealName, onlyAi: true }),
                         });
 

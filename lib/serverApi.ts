@@ -19,8 +19,13 @@ export function requireEnv(name: string): string {
 }
 
 export function getSupabaseAdminClient() {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    if (!supabaseUrl) {
+        throw new ApiError(500, 'Server configuration missing: VITE_SUPABASE_URL');
+    }
+
     return createClient(
-        requireEnv('VITE_SUPABASE_URL'),
+        supabaseUrl,
         requireEnv('SUPABASE_SERVICE_ROLE_KEY')
     );
 }

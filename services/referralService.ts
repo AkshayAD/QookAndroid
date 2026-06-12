@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
+import { getApiBaseUrl } from '../utils/platform';
 
 // =====================================================
 // REFERRAL CODE MANAGEMENT
@@ -69,25 +71,21 @@ export async function validateReferralCode(code: string): Promise<{
             return { valid: false, error: 'Invalid code format' };
         }
 
-        const { data, error } = await supabase
-            .from('referral_codes')
-            .select('user_id, is_active, usage_count, max_uses')
-            .eq('code', normalizedCode)
-            .single();
+        const response = await fetch(`${getApiBaseUrl()}/api/referrals`, {
+            method: 'POST',
+            headers: await getAuthenticatedJsonHeaders(),
+            body: JSON.stringify({
+                action: 'validate_referral',
+                referral_code: normalizedCode,
+            }),
+        });
+        const data = await response.json();
 
-        if (error || !data) {
-            return { valid: false, error: 'Code not found' };
+        if (!response.ok || !data.valid) {
+            return { valid: false, error: data.error || 'Validation failed' };
         }
 
-        if (!data.is_active) {
-            return { valid: false, error: 'Code is no longer active' };
-        }
-
-        if (data.max_uses && data.usage_count >= data.max_uses) {
-            return { valid: false, error: 'Code has reached maximum uses' };
-        }
-
-        return { valid: true, referrerId: data.user_id };
+        return { valid: true, referrerId: data.referrerId };
     } catch (error) {
         console.error('Error validating referral code:', error);
         return { valid: false, error: 'Validation failed' };
@@ -105,85 +103,17 @@ export async function applyReferral(
     referralCode: string
 ): Promise<{ success: boolean; error?: string }> {
     try {
-        const validation = await validateReferralCode(referralCode);
-        if (!validation.valid || !validation.referrerId) {
-            return { success: false, error: validation.error };
-        }
-
-        // Prevent self-referral
-        if (validation.referrerId === refereeId) {
-            return { success: false, error: 'Cannot use your own referral code' };
-        }
-
-        // Check if user was already referred
-        const { data: existingReferral } = await supabase
-            .from('referrals')
-            .select('id')
-            .eq('referee_id', refereeId)
-            .maybeSingle();
-
-        if (existingReferral) {
-            return { success: false, error: 'Already referred by someone' };
-        }
-
-        // ANTI-FRAUD: Check if user has already completed onboarding
-        // This prevents users from applying referral codes after initial signup
-        const { data: userSettings } = await supabase
-            .from('user_settings')
-            .select('onboarding_completed')
-            .eq('user_id', refereeId)
-            .maybeSingle();
-
-        if (userSettings?.onboarding_completed) {
-            return { success: false, error: 'Referral codes can only be used during signup' };
-        }
-
-        // Get referral code ID
-        const { data: codeData } = await supabase
-            .from('referral_codes')
-            .select('id')
-            .eq('code', referralCode.toUpperCase())
-            .single();
-
-        // Create referral record
-        const { error: referralError } = await supabase
-            .from('referrals')
-            .insert({
-                referrer_id: validation.referrerId,
-                referee_id: refereeId,
-                referral_code_id: codeData?.id,
-                status: 'pending',
-                referee_credits_awarded: 3
-            });
-
-        if (referralError) {
-            console.error('Error creating referral:', referralError);
-            return { success: false, error: 'Failed to apply referral' };
-        }
-
-        // Update referral code usage count
-        await supabase.rpc('increment_referral_usage', { p_code: referralCode.toUpperCase() });
-
-        // Award referee 3 bonus credits (add to their referral_credits)
-        const { error: creditError } = await supabase
-            .from('user_credits')
-            .update({ referral_credits: 3 })
-            .eq('user_id', refereeId);
-
-        if (creditError) {
-            console.error('Error awarding referee credits:', creditError);
-        }
-
-        // Update user_profiles with referral info
-        await supabase
-            .from('user_profiles')
-            .update({
-                referred_by: validation.referrerId,
-                referral_code_used: referralCode.toUpperCase()
-            })
-            .eq('id', refereeId);
-
-        return { success: true };
+        const response = await fetch(`${getApiBaseUrl()}/api/referrals`, {
+            method: 'POST',
+            headers: await getAuthenticatedJsonHeaders(),
+            body: JSON.stringify({
+                action: 'apply_referral',
+                user_id: refereeId,
+                referral_code: referralCode,
+            }),
+        });
+        const data = await response.json();
+        return response.ok ? { success: true } : { success: false, error: data.error || 'Failed to apply referral' };
     } catch (error) {
         console.error('Error applying referral:', error);
         return { success: false, error: 'Failed to apply referral' };
@@ -196,65 +126,16 @@ export async function applyReferral(
  */
 export async function awardReferrerCredits(refereeId: string): Promise<boolean> {
     try {
-        // Get referral record
-        const { data: referral, error: fetchError } = await supabase
-            .from('referrals')
-            .select('id, referrer_id, status, referrer_credits_awarded')
-            .eq('referee_id', refereeId)
-            .single();
-
-        if (fetchError || !referral) {
-            return false; // No referral found
-        }
-
-        // Only award if pending and not yet awarded
-        if (referral.status !== 'pending' || referral.referrer_credits_awarded > 0) {
-            return false;
-        }
-
-        // Check monthly cap (10 referrals per month)
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
-
-        const { count: monthlyCount } = await supabase
-            .from('referrals')
-            .select('*', { count: 'exact', head: true })
-            .eq('referrer_id', referral.referrer_id)
-            .eq('status', 'active')
-            .gte('updated_at', startOfMonth.toISOString());
-
-        if ((monthlyCount || 0) >= 10) {
-            console.log('Referrer reached monthly cap');
-            return false;
-        }
-
-        // Award referrer 3 credits
-        const { data: referrerCredits } = await supabase
-            .from('user_credits')
-            .select('referral_credits')
-            .eq('user_id', referral.referrer_id)
-            .single();
-
-        const currentCredits = referrerCredits?.referral_credits || 0;
-
-        await supabase
-            .from('user_credits')
-            .update({ referral_credits: currentCredits + 3 })
-            .eq('user_id', referral.referrer_id);
-
-        // Update referral record
-        await supabase
-            .from('referrals')
-            .update({
-                status: 'active',
-                referrer_credits_awarded: 3,
-                referee_first_action_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', referral.id);
-
-        return true;
+        const response = await fetch(`${getApiBaseUrl()}/api/referrals`, {
+            method: 'POST',
+            headers: await getAuthenticatedJsonHeaders(),
+            body: JSON.stringify({
+                action: 'award_referrer_credits',
+                user_id: refereeId,
+            }),
+        });
+        const data = await response.json();
+        return response.ok && data.awarded === true;
     } catch (error) {
         console.error('Error awarding referrer credits:', error);
         return false;

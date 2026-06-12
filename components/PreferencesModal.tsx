@@ -7,6 +7,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useFeatureGate } from '../hooks/useFeatureGate';
 import { getApiBaseUrl, isNative } from '../utils/platform';
+import { getAuthenticatedJsonHeaders } from '../utils/authHeaders';
 import { X, Wand2, Save, History, Plus, User, Coffee, Sun, Moon, AlertCircle, Check, ThumbsUp, ThumbsDown, Trash2, ChevronDown, ChevronUp, Sparkles, Globe, MapPin, RotateCcw, Settings, Home, Camera, Lock, Image } from 'lucide-react';
 import { QUICK_COOK_INSTRUCTION_OPTIONS } from '../constants';
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -420,9 +421,9 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                             try {
                                                 const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
                                                     method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json' },
+                                                    headers: await getAuthenticatedJsonHeaders(),
                                                     body: JSON.stringify({
-                                                        userId,
+                                                        userId: user?.id,
                                                         imageData: base64,
                                                         imageType: file.type || 'image/jpeg'
                                                     })
@@ -706,9 +707,9 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                                                         if (photo.base64String) {
                                                                             const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
                                                                                 method: 'POST',
-                                                                                headers: { 'Content-Type': 'application/json' },
+                                                                                headers: await getAuthenticatedJsonHeaders(),
                                                                                 body: JSON.stringify({
-                                                                                    userId,
+                                                                                    userId: user?.id,
                                                                                     imageData: photo.base64String,
                                                                                     imageType: `image/${photo.format || 'jpeg'}`
                                                                                 })
@@ -761,14 +762,14 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
 
                                                                                 if (photo.base64String) {
                                                                                     photoCount++;
-                                                                                    const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
-                                                                                        method: 'POST',
-                                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                                        body: JSON.stringify({
-                                                                                            userId,
-                                                                                            imageData: photo.base64String,
-                                                                                            imageType: `image/${photo.format || 'jpeg'}`
-                                                                                        })
+                                                                                   const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
+                                                                                       method: 'POST',
+                                                                                       headers: await getAuthenticatedJsonHeaders(),
+                                                                                       body: JSON.stringify({
+                                                                                           userId: user?.id,
+                                                                                           imageData: photo.base64String,
+                                                                                           imageType: `image/${photo.format || 'jpeg'}`
+                                                                                       })
                                                                                     });
                                                                                     const result = await response.json();
                                                                                     if (result.success && result.groceries?.length > 0) {
@@ -836,11 +837,11 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                                                                 reader.readAsDataURL(file);
                                                                             });
 
-                                                                            const response = await fetch('/api/grocery-vision', {
+                                                                            const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
                                                                                 method: 'POST',
-                                                                                headers: { 'Content-Type': 'application/json' },
+                                                                                headers: await getAuthenticatedJsonHeaders(),
                                                                                 body: JSON.stringify({
-                                                                                    userId,
+                                                                                    userId: user?.id,
                                                                                     imageData: base64,
                                                                                     imageType: file.type || 'image/jpeg'
                                                                                 })
@@ -1177,11 +1178,11 @@ const PreferencesModal: React.FC<Props> = ({ profiles, currentProfileId, history
                                                                             reader.onload = async () => {
                                                                                 const base64 = (reader.result as string).split(',')[1];
                                                                                 try {
-                                                                                    const response = await fetch('/api/grocery-vision', {
+                                                                                    const response = await fetch(`${getApiBaseUrl()}/api/grocery-vision`, {
                                                                                         method: 'POST',
-                                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                                        headers: await getAuthenticatedJsonHeaders(),
                                                                                         body: JSON.stringify({
-                                                                                            userId,
+                                                                                            userId: user?.id,
                                                                                             imageData: base64,
                                                                                             imageType: file.type || 'image/jpeg'
                                                                                         })

@@ -5,6 +5,7 @@ const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY");
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("VITE_SUPABASE_ANON_KEY");
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -41,6 +42,74 @@ interface RecipeResult {
     ingredients: StructuredIngredient[];
     nutrition: NutritionInfo | null;
     isAiGenerated: boolean;
+}
+
+class HttpError extends Error {
+    status: number;
+
+    constructor(status: number, message: string) {
+        super(message);
+        this.status = status;
+    }
+}
+
+function jsonResponse(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+}
+
+function normalizeMealName(value: unknown): string | null {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    const normalized = value.replace(/[\x00-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim();
+    if (normalized.length < 2 || normalized.length > 120) {
+        return null;
+    }
+
+    return normalized;
+}
+
+async function requireAuthenticatedUser(req: Request): Promise<string> {
+    const authHeader = req.headers.get("Authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+
+    if (!token) {
+        throw new HttpError(401, "Authentication required");
+    }
+
+    if (!SUPABASE_ANON_KEY) {
+        throw new HttpError(500, "Supabase auth configuration missing");
+    }
+
+    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data, error } = await authClient.auth.getUser(token);
+    if (error || !data?.user?.id) {
+        throw new HttpError(401, "Authentication required");
+    }
+
+    return data.user.id;
+}
+
+async function assertRecipeRateLimit(supabase: any, userId: string) {
+    const { data, error } = await supabase.rpc("check_rate_limit", {
+        p_user_id: userId,
+        p_action_type: "recipe_search",
+        p_window_minutes: 1,
+        p_max_requests: 20,
+    });
+
+    if (error) {
+        console.error("Recipe rate limit check failed:", error);
+        throw new HttpError(500, "Unable to verify request limits");
+    }
+
+    if (data !== true) {
+        throw new HttpError(429, "Too many recipe searches. Please try again shortly.");
+    }
 }
 
 function extractMainDish(mealText: string): { mainDish: string; sides: string[] } {
@@ -267,18 +336,25 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
     }
 }
 
-    Deno.serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
         if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
         try {
+            const userId = await requireAuthenticatedUser(req);
             const { mealName, skipAi = false, onlyAi = false } = await req.json();
-            if (!mealName || typeof mealName !== "string") {
-                return new Response(JSON.stringify({ error: "mealName required" }), { status: 400, headers: corsHeaders });
+            const normalizedMealName = normalizeMealName(mealName);
+            if (!normalizedMealName) {
+                return jsonResponse({ error: "mealName required" }, 400);
             }
 
             const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-            const { mainDish, sides } = extractMainDish(mealName);
+            await assertRecipeRateLimit(supabase, userId);
+
+            const { mainDish, sides } = extractMainDish(normalizedMealName);
             const cacheKey = mainDish.toLowerCase().trim();
+            if (cacheKey.length < 2 || cacheKey.length > 120) {
+                return jsonResponse({ error: "mealName required" }, 400);
+            }
 
             // ONLY AI MODE
             if (onlyAi) {
@@ -295,9 +371,9 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
                         difficulty: aiData.difficulty
                     }).eq("meal_name_lower", cacheKey);
 
-                    return new Response(JSON.stringify({ ...aiData, isAiGenerated: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+                    return jsonResponse({ ...aiData, isAiGenerated: true });
                 } else {
-                    return new Response(JSON.stringify({ error: "AI generation failed" }), { status: 500, headers: corsHeaders });
+                    return jsonResponse({ error: "AI generation failed" }, 500);
                 }
             }
 
@@ -308,7 +384,7 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
                 console.log(`Cache hit: ${mainDish}`);
                 return new Response(
                     JSON.stringify({
-                        mealName, mainDish, sides,
+                        mealName: normalizedMealName, mainDish, sides,
                         youtubeVideoId: cached.youtube_video_id,
                         videoTitle: cached.video_title,
                         channelName: cached.channel_name,
@@ -333,7 +409,7 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
             const ytData = await (await fetch(youtubeUrl)).json();
 
             if (!ytData.items?.length) {
-                return new Response(JSON.stringify({ error: "No video found", mainDish }), { status: 404, headers: corsHeaders });
+                return jsonResponse({ error: "No video found", mainDish }, 404);
             }
 
             // 3. Stats & Scoring
@@ -393,7 +469,7 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
             }
 
             const result: RecipeResult = {
-                mealName, mainDish, sides, youtubeVideoId: videoId, videoTitle,
+                mealName: normalizedMealName, mainDish, sides, youtubeVideoId: videoId, videoTitle,
                 channelName: bestVideo.snippet.channelTitle, viewCount,
                 thumbnailUrl: bestVideo.snippet.thumbnails.high?.url || bestVideo.snippet.thumbnails.default?.url,
                 description, cookTimeMinutes, difficulty, ingredients, nutrition, isAiGenerated
@@ -418,10 +494,13 @@ Categories: dairy, vegetables, spices, grains, protein, oils, condiments, other.
                 is_ai_generated: isAiGenerated,
             }, { onConflict: "meal_name_lower" });
 
-            return new Response(JSON.stringify({ ...result, fromCache: false }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+            return jsonResponse({ ...result, fromCache: false });
 
         } catch (error) {
             console.error("Recipe search error:", error);
-            return new Response(JSON.stringify({ error: "Failed to search for recipe" }), { status: 500, headers: corsHeaders });
+            if (error instanceof HttpError) {
+                return jsonResponse({ error: error.message }, error.status);
+            }
+            return jsonResponse({ error: "Failed to search for recipe" }, 500);
         }
-    });
+});
