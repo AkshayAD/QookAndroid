@@ -52,19 +52,19 @@ CREATE POLICY "Users can view own usage"
   TO authenticated
   USING ((SELECT auth.uid()) = user_id);
 
-DROP POLICY IF EXISTS "Users can view own billing intents" ON public.billing_payment_intents;
-CREATE POLICY "Users can view own billing intents"
-  ON public.billing_payment_intents
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
-
-DROP POLICY IF EXISTS "Users can view own billing events" ON public.billing_payment_events;
-CREATE POLICY "Users can view own billing events"
-  ON public.billing_payment_events
-  FOR SELECT
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id);
+-- billing_payment_intents / billing_payment_events only exist where the
+-- 20260518 payment hardening migration ran; guard for environments without them.
+DO $$
+BEGIN
+  IF to_regclass('public.billing_payment_intents') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Users can view own billing intents" ON public.billing_payment_intents';
+    EXECUTE 'CREATE POLICY "Users can view own billing intents" ON public.billing_payment_intents FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id)';
+  END IF;
+  IF to_regclass('public.billing_payment_events') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "Users can view own billing events" ON public.billing_payment_events';
+    EXECUTE 'CREATE POLICY "Users can view own billing events" ON public.billing_payment_events FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id)';
+  END IF;
+END $$;
 
 DO $$
 DECLARE
@@ -104,13 +104,23 @@ BEGIN
   END LOOP;
 END $$;
 
-REVOKE ALL ON FUNCTION public.grant_credits(UUID, INTEGER, TEXT, TIMESTAMPTZ, TEXT, UUID, JSONB) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.verify_razorpay_payment(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.consume_credits(UUID, TEXT, DECIMAL, UUID) FROM PUBLIC;
-
-GRANT EXECUTE ON FUNCTION public.grant_credits(UUID, INTEGER, TEXT, TIMESTAMPTZ, TEXT, UUID, JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION public.verify_razorpay_payment(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION public.consume_credits(UUID, TEXT, DECIMAL, UUID) TO service_role;
+-- Lock every overload of the billing RPCs (signatures differ between the
+-- QookAndroid and QookCommander migration lineages).
+DO $$
+DECLARE
+  fn RECORD;
+BEGIN
+  FOR fn IN
+    SELECT p.oid::regprocedure AS sig
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname IN ('grant_credits', 'verify_razorpay_payment', 'consume_credits')
+  LOOP
+    EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated', fn.sig);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO service_role', fn.sig);
+  END LOOP;
+END $$;
 
 CREATE OR REPLACE FUNCTION public.check_rate_limit(
   p_user_id UUID,

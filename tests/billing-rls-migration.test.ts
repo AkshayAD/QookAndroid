@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const migration = readFileSync(
     join(process.cwd(), 'supabase/migrations/20260607120000_lock_billing_client_writes.sql'),
     'utf8'
-);
+).replace(/\r\n/g, '\n');
 
 describe('billing RLS write lockdown migration', () => {
     it('drops the client-side subscription and credit mutation policies from the advisor cleanup', () => {
