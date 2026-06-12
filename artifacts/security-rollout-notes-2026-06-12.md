@@ -92,3 +92,38 @@ pending a live-vs-repo audit; see RECONCILIATION_TRIAGE.md).
 
 ### Known degradation window
 - Between migration apply (~16:26 UTC) and production promotion (~16:36 UTC), old prod client code attempting direct billing writes / referral RPCs would have failed (~10 minutes). Post-promotion code routes these server-side.
+
+## INCIDENT 2026-06-13 — rollout CSP shipped www.qook.in unstyled (RESOLVED)
+
+**Report:** user found the site visually broken the morning after the rollout.
+
+**Root cause:** the CSP in `vercel.json` was authored against the QookAndroid lineage's
+`index.html` (compiled Tailwind, no external fonts) and ported to QookCommander without
+re-validating against prod's *different* `index.html`, which loads at runtime:
+- `https://cdn.tailwindcss.com` (entire Tailwind styling) — blocked by `script-src` → site rendered with zero styling
+- `https://fonts.googleapis.com/css2?family=Inter...` — blocked by `style-src`/`font-src`
+- `https://cdn.razorpay.com/.../razorpay-risk-detection/bundle.js` (loaded by checkout.js) — blocked by `script-src`
+- `https://accounts.google.com/gsi/style` (GIS stylesheet) — blocked by `style-src`
+
+**Why the gate missed it:** P6/P7 smoke was curl-level (status codes + header presence).
+CSP violations only manifest in a browser console. No server-side errors existed
+(Vercel runtime logs clean; Supabase all 200s) — the app *functioned*, unstyled.
+
+**Fix (QookCommander):** `ce834e9` (script-src + cdn.tailwindcss.com, razorpay→`*.razorpay.com`,
+style-src + fonts.googleapis.com, font-src + fonts.gstatic.com) and `af321c3`
+(style-src + accounts.google.com for GIS). Both promoted via ancestry-verified fast-forward;
+production deployments `dpl_5wMDnESDV33jqa2eK6V3BWFfjQ2k` → final on `af321c3`.
+
+**Validation (Playwright headless Chromium against preview, then production):**
+- landing + `/demo`: HTTP 200, Tailwind active (`window.tailwind` defined, flex/grid layouts rendered), 0 CSP violations, 0 console errors, 0 page errors; screenshots verified visually
+- login modal: renders styled; on production `Continue with Google` GIS iframe present, 0 CSP violations
+- API matrix re-verified post-fix: health 200; account/grocery-vision 401 on `{}`;
+  admin-api/create-order/create-subscription/cancel-subscription/verify-payment 401 with
+  well-formed unauthenticated bodies AND with garbage bearer (their 400-before-auth is
+  field validation only; no privileged work precedes `authenticateSupabaseUser`)
+- known benign leftovers: Tailwind "CDN in production" advisory (tracked: triage item 10),
+  Razorpay's own `checkout-static-next.razorpay.com/build/undefined` ORB probe (checkout.js quirk, CSP-independent)
+
+**Prevention:** `scripts/browser-smoke.mjs` added (QookAndroid lineage) and made a MANDATORY
+gate in DEPLOYMENT_STATUS.md: preview before promotion, production after. CSP is now
+identical in both repos' `vercel.json` (canonical = prod's needs, superset for both lineages).

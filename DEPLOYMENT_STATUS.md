@@ -11,7 +11,7 @@
 
 | Task | Status | Details |
 |------|--------|---------|
-| Production deploy | Complete | `www.qook.in` serves QookCommander `main` commit `0ba5791`, deployed 2026-06-12 as `dpl_CPRfBFggynAG3itqrLDXBU8mHMqp`. |
+| Production deploy | Complete | `www.qook.in` serves QookCommander `main` commit `af321c3` (CSP hotfix, 2026-06-13, `dpl_5wMDnESDV33jqa2eK6V3BWFfjQ2k`+follow-up). |
 | Security rollout | Complete | 2026-06-12 rollout completed across GitHub, Vercel, and Supabase. See `artifacts/security-rollout-notes-2026-06-12.md`. |
 | Supabase migration | Complete | Migration `20260607120000` applied. |
 | Recipe search | Complete | `recipe-search` v26 deployed. |
@@ -33,7 +33,11 @@ Production deploys only through QookCommander:
 
 1. Branch from `vercel_origin/main`.
 2. Push the branch and review the Vercel preview.
-3. Fast-forward merge to `main`; never force-push or rewrite `main`.
+3. **Browser-validate the preview** (MANDATORY — curl smoke is not enough): `node scripts/browser-smoke.mjs <preview-url> "_vercel_jwt=<cookie>"`. Must report 0 CSP violations, 0 console/page errors, styled rendering. The 2026-06-13 incident (site shipped unstyled because the CSP blocked prod's `cdn.tailwindcss.com` script) passed every curl check and was only visible in a real browser.
+4. Fast-forward merge to `main`; never force-push or rewrite `main`.
+5. Re-run `node scripts/browser-smoke.mjs https://www.qook.in` against production; on prod the login modal must show the Google sign-in iframe (`gisIframes>=1`).
+
+**CSP caveat:** prod's `index.html` differs from QookAndroid's — it loads Tailwind from `cdn.tailwindcss.com` and fonts from `fonts.googleapis.com` at runtime. Any CSP change must be validated against the deployed lineage's actual HTML, in a browser. The canonical CSP lives identically in both repos' `vercel.json` since `af321c3`.
 
 QookAndroid is the Android/dev record repo. Do not treat it as the production deploy source.
 

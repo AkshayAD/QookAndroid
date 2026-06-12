@@ -60,3 +60,4 @@ Many older migration filenames use 8-digit prefixes that do not match the 14-dig
 7. Native -> done when Android auth/plugins are ported and secret handling is verified.
 8. Store assets -> done when Play Store collateral and asset-build scripts are present on production lineage.
 9. App shell -> done when `App.tsx` and `Router.tsx` are reconciled and www.qook.in smoke tests pass.
+10. Tailwind pipeline -> done when the production lineage compiles Tailwind at build time (PostCSS/CLI) and `index.html` drops `cdn.tailwindcss.com` + `fonts.googleapis.com` runtime loads; then re-tighten the CSP (`script-src` without the CDN). Caution: the CDN generates utility classes on demand at runtime, so a compiled build must be browser-smoke-tested for missing dynamically-constructed classes (2026-06-13 CSP incident context).
