@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qook Security Rollout Plan - June 7, 2026</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --ink: #182338;
+      --muted: #607086;
+      --panel: #ffffff;
+      --line: #d9e1ec;
+      --blue: #145ea8;
+      --blue-soft: #e8f2ff;
+      --green: #127447;
+      --green-soft: #e7f7ee;
+      --orange: #9a5b00;
+      --orange-soft: #fff4dc;
+      --red: #a52828;
+      --red-soft: #fde8e8;
+      --shadow: 0 16px 36px rgba(21, 34, 54, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      line-height: 1.55;
+    }
+
+    header {
+      background: linear-gradient(135deg, #10233f 0%, #155d73 55%, #116245 100%);
+      color: white;
+      padding: 46px 24px 38px;
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 12px;
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    h1 {
+      max-width: 920px;
+      margin: 0;
+      font-size: clamp(34px, 5vw, 58px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 850px;
+      margin: 18px 0 0;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 18px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .metric {
+      min-height: 128px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 28px;
+      line-height: 1.1;
+      margin-bottom: 10px;
+    }
+
+    .metric span {
+      display: block;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 14px;
+    }
+
+    main {
+      padding: 30px 24px 56px;
+    }
+
+    section {
+      margin-top: 26px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 25px;
+      line-height: 1.22;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 19px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    .panel,
+    .phase,
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel {
+      padding: 22px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      padding: 18px;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .badge.ok {
+      background: var(--green-soft);
+      color: var(--green);
+      border-color: #b7e2c8;
+    }
+
+    .badge.warn {
+      background: var(--orange-soft);
+      color: var(--orange);
+      border-color: #efd28b;
+    }
+
+    .badge.risk {
+      background: var(--red-soft);
+      color: var(--red);
+      border-color: #f2b9b9;
+    }
+
+    .badge.info {
+      background: var(--blue-soft);
+      color: var(--blue);
+      border-color: #b8d8fb;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .step {
+      min-height: 128px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink);
+    }
+
+    .step small {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .phase {
+      overflow: hidden;
+    }
+
+    .phase-head {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) 210px;
+      gap: 16px;
+      align-items: center;
+      padding: 18px 20px;
+      background: #eef3f8;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .phase-number {
+      width: 64px;
+      height: 64px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: #173554;
+      color: white;
+      font-size: 26px;
+      font-weight: 900;
+    }
+
+    .phase-body {
+      padding: 20px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    ul,
+    ol {
+      margin: 8px 0 0;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 7px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    th,
+    td {
+      text-align: left;
+      vertical-align: top;
+      border-bottom: 1px solid var(--line);
+      padding: 13px 14px;
+      font-size: 14px;
+    }
+
+    th {
+      background: #eef3f8;
+      font-weight: 900;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code {
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.92em;
+      background: #f1f5f9;
+      border: 1px solid #dbe4ee;
+      padding: 2px 5px;
+      border-radius: 5px;
+    }
+
+    pre {
+      overflow: auto;
+      background: #101827;
+      color: #e5edf7;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 10px 0 0;
+    }
+
+    .callout {
+      border-left: 5px solid var(--orange);
+      background: var(--orange-soft);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+
+    .good-callout {
+      border-left: 5px solid var(--green);
+      background: var(--green-soft);
+      border-radius: 8px;
+      padding: 16px 18px;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    a {
+      color: var(--blue);
+    }
+
+    @media (max-width: 1000px) {
+      .hero-grid,
+      .timeline,
+      .grid-2,
+      .grid-3,
+      .phase-body,
+      .phase-head {
+        grid-template-columns: 1fr;
+      }
+
+      .phase-number {
+        width: 56px;
+        height: 56px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Deployment and synchronization plan</p>
+      <h1>Roll out the security fixes to GitHub, the live website, Supabase, and the Android app.</h1>
+      <p class="subtitle">Created from the current local repo state on June 7, 2026. This is a plan only; no remote push, deploy, database mutation, or app-store release has been performed by this plan artifact.</p>
+      <div class="hero-grid">
+        <div class="metric">
+          <strong>2 repos</strong>
+          <span><code>QookAndroid</code> and <code>QookCommander</code> must be reconciled, not blindly overwritten.</span>
+        </div>
+        <div class="metric">
+          <strong>4 surfaces</strong>
+          <span>GitHub, Vercel/web, Supabase database/functions, and Android package release.</span>
+        </div>
+        <div class="metric">
+          <strong>8 gates</strong>
+          <span>Each phase has explicit evidence before the next phase begins.</span>
+        </div>
+        <div class="metric">
+          <strong>1 blocker</strong>
+          <span>Production secrets/deploy permissions must be confirmed before live rollout.</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <section class="panel">
+        <h2>Current State Snapshot</h2>
+        <div class="grid-2">
+          <div>
+            <div class="badge-row">
+              <span class="badge warn"><span class="dot"></span>Local changes pending</span>
+              <span class="badge info"><span class="dot"></span>Branch: main</span>
+            </div>
+            <p>The security fixes are implemented locally but are not committed. The local branch is <code>main</code> at <code>822cfbc</code>, matching <code>origin/main</code>.</p>
+            <p class="muted">Important: create a rollout branch before committing. Avoid committing directly on <code>main</code> until the two-repo strategy is confirmed.</p>
+          </div>
+          <div>
+            <div class="badge-row">
+              <span class="badge risk"><span class="dot"></span>Remote divergence</span>
+              <span class="badge ok"><span class="dot"></span>Vercel status green</span>
+            </div>
+            <p><code>vercel_origin/main</code> is at <code>8a0e5a1</code> and has a successful Vercel status. Local <code>main</code> and <code>vercel_origin/main</code> are substantially divergent, so the deployment repo needs a controlled patch transplant or merge plan.</p>
+            <p class="muted">Observed divergence: local side has 34 unique commits; Vercel repo side has 284 unique commits.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="callout">
+        <h2>Non-Negotiable Rollout Rule</h2>
+        <p>Do not force-push or directly overwrite <code>AkshayAD/QookCommander</code>. It is the live Vercel deployment source and currently contains many commits not present in <code>QookAndroid</code>. The safe route is to commit the security patch once, then apply that patch onto a branch based on each target repository's current main branch.</p>
+      </section>
+
+      <section class="panel">
+        <h2>End-To-End Flow</h2>
+        <div class="timeline">
+          <div class="step"><b>1. Freeze</b><small>Capture current state, protect secrets, create rollout branch.</small></div>
+          <div class="step"><b>2. Fix CI</b><small>Update workflows/env gates so automation can build the current app.</small></div>
+          <div class="step"><b>3. Commit</b><small>Stage only intended security files and tests.</small></div>
+          <div class="step"><b>4. Sync repos</b><small>Push reviewed branches to both GitHub repos.</small></div>
+          <div class="step"><b>5. Preview</b><small>Use Vercel preview deployment and Supabase staging/branch if available.</small></div>
+          <div class="step"><b>6. Migrate</b><small>Apply Supabase migration and deploy Edge Function.</small></div>
+          <div class="step"><b>7. Promote</b><small>Promote web to production and build signed Android release.</small></div>
+          <div class="step"><b>8. Verify</b><small>Run production smoke tests, monitor logs, and confirm app release health.</small></div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">0</div>
+          <div>
+            <h2>Preflight And Safety Freeze</h2>
+            <p class="muted">Goal: make remote deployment safe before any push or production mutation.</p>
+          </div>
+          <span class="badge warn"><span class="dot"></span>Must happen first</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Actions</h3>
+            <ol>
+              <li>Confirm who owns the live source of truth: <code>QookAndroid</code>, <code>QookCommander</code>, or both with a deliberate split.</li>
+              <li>Create a rollout branch from current local <code>main</code>: <code>codex/security-rollout-20260607</code>.</li>
+              <li>Inventory all untracked files and decide which belong in the security release. Do not stage unrelated docs such as broad strategy files unless intentionally requested.</li>
+              <li>Confirm all required production secrets exist in GitHub, Vercel, and Supabase dashboards. Do not print secret values into logs or commits.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Evidence Required</h3>
+            <ul>
+              <li><code>git status --short --branch</code> shows only expected files staged or unstaged.</li>
+              <li><code>git remote -v</code> confirms <code>origin</code> and <code>vercel_origin</code>.</li>
+              <li>Secret inventory is checked by names only, not values.</li>
+              <li>Named rollback owner is assigned before database migration.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">1</div>
+          <div>
+            <h2>Repair Deployment Automation Before Pushing</h2>
+            <p class="muted">Goal: make the automated pipelines match the current package manager, environment requirements, and Supabase deployment needs.</p>
+          </div>
+          <span class="badge risk"><span class="dot"></span>Current gap found</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Actions</h3>
+            <ol>
+              <li>Fix <code>.github/workflows/deploy.yml</code>. It currently uses pnpm while this repo has <code>package-lock.json</code> and npm scripts. Use <code>npm ci</code> plus <code>npm run build</code>, or add and commit a real <code>pnpm-lock.yaml</code>.</li>
+              <li>Add the missing public build variable <code>VITE_RAZORPAY_KEY_ID</code> to any workflow that builds the web bundle.</li>
+              <li>Decide how <code>scripts/validate-env.mjs</code> should behave in CI. Today it requires server secrets whenever <code>CI</code> or <code>VERCEL</code> is true. Either provide required server secrets to the build environment or split web-build validation from server-runtime validation.</li>
+              <li>Fix <code>.github/workflows/supabase-deploy.yml</code> so Edge Functions are actually deployed. The current workflow pushes migrations but only echoes that function deployment can be enabled.</li>
+              <li>Add focused CI commands: <code>npm test</code>, <code>npm audit --audit-level=moderate</code>, <code>npm run build</code>, and optionally Android debug build on a separate workflow.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Evidence Required</h3>
+            <ul>
+              <li>GitHub Actions dry review shows no missing package manager lockfile mismatch.</li>
+              <li>Workflow env names match Vercel/GitHub secrets by name.</li>
+              <li>Supabase workflow includes <code>supabase db push</code> and <code>supabase functions deploy recipe-search</code> or equivalent all-functions deploy.</li>
+              <li>CI does not expose secret values in logs.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">2</div>
+          <div>
+            <h2>Local Release Validation</h2>
+            <p class="muted">Goal: prove the patch is still good immediately before committing and pushing.</p>
+          </div>
+          <span class="badge ok"><span class="dot"></span>Repeatable gate</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Commands</h3>
+            <pre>npm test
+npm audit --json
+$env:VITE_SUPABASE_URL="https://example.supabase.co"
+$env:VITE_SUPABASE_ANON_KEY="dummy-anon-key"
+$env:VITE_RAZORPAY_KEY_ID="rzp_test_dummy"
+npm run build
+npm run build:android
+cd android
+.\gradlew.bat assembleDebug --console=plain</pre>
+          </div>
+          <div>
+            <h3>Evidence Required</h3>
+            <ul>
+              <li>Full test suite passes.</li>
+              <li>Dependency audit reports zero vulnerabilities or approved exceptions.</li>
+              <li>Web and Android bundles build.</li>
+              <li>Android debug APK is generated.</li>
+              <li>Browser smoke renders locally and does not show new blocking errors.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">3</div>
+          <div>
+            <h2>Commit And Push To QookAndroid</h2>
+            <p class="muted">Goal: get the reviewed security patch into the Android/source repo without mixing unrelated local files.</p>
+          </div>
+          <span class="badge info"><span class="dot"></span>origin</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Actions</h3>
+            <ol>
+              <li>Create branch <code>codex/security-rollout-20260607</code>.</li>
+              <li>Stage only security, tests, deployment workflow fixes, and the rollout/report artifacts intentionally chosen for the release.</li>
+              <li>Commit with a clear message such as <code>fix: close security scan findings</code>.</li>
+              <li>Push the branch to <code>origin</code> and open a PR to <code>AkshayAD/QookAndroid:main</code>.</li>
+              <li>Require CI to pass before merge.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Suggested Staging Policy</h3>
+            <ul>
+              <li>Include: API auth fixes, client auth headers, Supabase migration/function, Android manifest, CSP, dependency lockfile, tests, workflow corrections.</li>
+              <li>Review separately: pre-existing untracked docs and advisor cleanup migrations if they were not part of this security rollout.</li>
+              <li>Exclude: local env files, build outputs, release APKs, keystores, and secret-bearing files.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">4</div>
+          <div>
+            <h2>Reconcile And Push To QookCommander</h2>
+            <p class="muted">Goal: make the live Vercel repo receive the same security fixes without losing its unique history.</p>
+          </div>
+          <span class="badge risk"><span class="dot"></span>Needs controlled merge</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Safe Strategy</h3>
+            <ol>
+              <li>Create a separate worktree from <code>vercel_origin/main</code>.</li>
+              <li>Create branch <code>codex/security-rollout-20260607-vercel</code>.</li>
+              <li>Apply the security patch from the committed <code>QookAndroid</code> branch using <code>git cherry-pick</code>, <code>git format-patch</code>, or <code>git diff</code> plus conflict resolution.</li>
+              <li>Resolve conflicts in favor of preserving <code>QookCommander</code> production-specific code unless the security invariant requires otherwise.</li>
+              <li>Run the full validation suite in that worktree.</li>
+              <li>Push to <code>vercel_origin</code> and open a PR against <code>AkshayAD/QookCommander:main</code>.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Evidence Required</h3>
+            <ul>
+              <li>No force push used.</li>
+              <li>Patch exists in both repos with equivalent security behavior.</li>
+              <li>Vercel preview deployment is created from the PR branch.</li>
+              <li>Vercel status passes before production merge.</li>
+              <li>Final commits are documented in the rollout notes.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">5</div>
+          <div>
+            <h2>Supabase Database And Edge Function Rollout</h2>
+            <p class="muted">Goal: make the server-side security controls active in the real backend.</p>
+          </div>
+          <span class="badge warn"><span class="dot"></span>Production mutation</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Actions</h3>
+            <ol>
+              <li>Take or confirm a recent Supabase backup before applying migration <code>20260607120000_lock_billing_client_writes.sql</code>.</li>
+              <li>Confirm Supabase function secrets by name: <code>SUPABASE_URL</code>, <code>SUPABASE_ANON_KEY</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, provider keys, and any app-specific keys.</li>
+              <li>Run migration through the approved CI workflow or a controlled CLI session using the linked production project.</li>
+              <li>Deploy <code>recipe-search</code> after the code branch is merged, because the current workflow does not deploy it until fixed.</li>
+              <li>Run post-migration SQL checks that authenticated users cannot mutate protected billing tables and cannot execute restricted billing RPCs.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Post-Migration Checks</h3>
+            <ul>
+              <li>RLS policies for billing tables are read-only for users.</li>
+              <li><code>grant_credits</code>, <code>consume_credits</code>, and <code>verify_razorpay_payment</code> execute only as <code>service_role</code>.</li>
+              <li>Recipe search returns 401 for missing/invalid bearer token.</li>
+              <li>Authenticated recipe search still returns expected data for a normal user.</li>
+              <li>Server logs show no unexpected migration errors.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">6</div>
+          <div>
+            <h2>Web Preview And Production Promotion</h2>
+            <p class="muted">Goal: safely get the site live on Vercel domains after preview testing.</p>
+          </div>
+          <span class="badge info"><span class="dot"></span>Vercel</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Actions</h3>
+            <ol>
+              <li>Verify Vercel project link: <code>qook-commander</code>, project ID <code>prj_2T8cH7YrQnZH7zAxIPCQMWabLwBZ</code>.</li>
+              <li>Verify Vercel environment variables for Preview and Production. Vercel applies env vars per environment, and production deploys are created from the production branch or <code>vercel --prod</code>.</li>
+              <li>Use the <code>QookCommander</code> PR preview URL for QA. Do not promote until the preview passes all smoke tests.</li>
+              <li>Merge to production branch only after preview and Supabase gates pass.</li>
+              <li>After production deployment, verify <code>https://qook.in</code>, <code>https://www.qook.in</code>, and the Vercel deployment URL.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Web Smoke Matrix</h3>
+            <ul>
+              <li>Anonymous landing page loads with CSP active.</li>
+              <li>Google OAuth login works.</li>
+              <li>Onboarding referral validation and application work.</li>
+              <li>Admin route rejects unauthenticated and mismatched requests.</li>
+              <li>Grocery vision rejects unauthenticated requests and works for authenticated users.</li>
+              <li>Recipe search rejects unauthenticated requests and works for authenticated users.</li>
+              <li>Razorpay checkout opens and returns expected test/live behavior for the environment.</li>
+              <li>YouTube embeds and Supabase websocket/connect calls are not blocked by CSP.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">7</div>
+          <div>
+            <h2>Android App Release</h2>
+            <p class="muted">Goal: sync the hardened web bundle into the native app, verify it, then release through the store process.</p>
+          </div>
+          <span class="badge info"><span class="dot"></span>Android</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Actions</h3>
+            <ol>
+              <li>Bump <code>versionCode</code> and <code>versionName</code> in <code>android/app/build.gradle</code> before a store release.</li>
+              <li>Run <code>npm run build:android</code>.</li>
+              <li>Run <code>npx cap sync android</code> so the native project contains the latest web assets.</li>
+              <li>Build debug and release artifacts: <code>assembleDebug</code> for QA and <code>bundleRelease</code> for Play Console, with signing configured.</li>
+              <li>Install on emulator and at least one physical device if available.</li>
+              <li>Upload first to internal testing or closed testing; use staged rollout after smoke checks pass.</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Mobile Smoke Matrix</h3>
+            <ul>
+              <li>Cold launch and splash screen.</li>
+              <li>Google sign-in with Android OAuth client.</li>
+              <li>Session persistence after restart.</li>
+              <li>Onboarding and referral flow.</li>
+              <li>Meal generation, recipe search, grocery vision, and inventory capture.</li>
+              <li>Billing screen and Razorpay path as appropriate for the release track.</li>
+              <li>Confirm <code>android:allowBackup="false"</code> in merged manifest.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="phase">
+        <div class="phase-head">
+          <div class="phase-number">8</div>
+          <div>
+            <h2>Post-Deployment Verification And Monitoring</h2>
+            <p class="muted">Goal: prove the deployed system is secure and healthy, not only that the local code changed.</p>
+          </div>
+          <span class="badge ok"><span class="dot"></span>Completion gate</span>
+        </div>
+        <div class="phase-body">
+          <div>
+            <h3>Required Proof</h3>
+            <ul>
+              <li>GitHub PRs merged or deployment branches intentionally active in both repos.</li>
+              <li>Vercel production deployment URL and commit SHA recorded.</li>
+              <li>Supabase migration version visible as applied in the target project.</li>
+              <li>Supabase Edge Function deploy timestamp recorded.</li>
+              <li>Android internal-test build number recorded.</li>
+              <li>Production smoke-test checklist signed off.</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Monitoring Window</h3>
+            <ul>
+              <li>Watch Vercel function logs for auth failures, CORS/CSP issues, and API 500s.</li>
+              <li>Watch Supabase logs for migration errors, RLS denials in expected places, and function errors.</li>
+              <li>Watch Android crash reporting or Play Console pre-launch reports.</li>
+              <li>Keep rollback plan ready for at least the first 24 hours after production promotion.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Release Gate Table</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Gate</th>
+              <th>Owner Action</th>
+              <th>Pass Evidence</th>
+              <th>Stop Condition</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Scope gate</td>
+              <td>Review staged files before commit.</td>
+              <td>Only intended security/deploy/test files are staged.</td>
+              <td>Unrelated docs, env files, builds, or keystores appear in staged diff.</td>
+            </tr>
+            <tr>
+              <td>Repo sync gate</td>
+              <td>Push branch and PR to each repo.</td>
+              <td>Equivalent security patch exists on both repo branches.</td>
+              <td>Any force push or unresolved divergence risk.</td>
+            </tr>
+            <tr>
+              <td>CI gate</td>
+              <td>Run GitHub Actions and local checks.</td>
+              <td>Tests, audit, and build all pass.</td>
+              <td>Missing secret, package manager mismatch, failing test, or failing build.</td>
+            </tr>
+            <tr>
+              <td>Supabase gate</td>
+              <td>Apply migration and deploy function.</td>
+              <td>Migration applied, function deployed, auth/rate-limit tests pass.</td>
+              <td>RLS policy mismatch, failed migration, or broken authenticated flow.</td>
+            </tr>
+            <tr>
+              <td>Preview gate</td>
+              <td>QA Vercel preview URL.</td>
+              <td>Smoke matrix passes under preview env.</td>
+              <td>CSP, OAuth, Razorpay, AI endpoint, or referral regression.</td>
+            </tr>
+            <tr>
+              <td>Production gate</td>
+              <td>Merge/promote to production.</td>
+              <td>Production domain serves expected commit and passes smoke tests.</td>
+              <td>Unexpected production errors or missing backend deploy.</td>
+            </tr>
+            <tr>
+              <td>Android gate</td>
+              <td>Build, sign, and upload staged app release.</td>
+              <td>Internal/closed testing build passes mobile smoke matrix.</td>
+              <td>Release build, sign-in, session, or core workflow failure.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>Rollback Plan</h2>
+        <div class="grid-3">
+          <div class="card">
+            <h3>Web</h3>
+            <p>Rollback to the previous successful Vercel deployment from the dashboard or CLI. Keep the previous deployment URL and commit SHA in the release notes before promotion.</p>
+          </div>
+          <div class="card">
+            <h3>Supabase</h3>
+            <p>Database migrations are not safely rolled back casually. Take a backup first, prepare an explicit corrective migration for grants/policies, and roll back Edge Function code separately if needed.</p>
+          </div>
+          <div class="card">
+            <h3>Android</h3>
+            <p>Pause staged rollout in Play Console or promote the previous known-good build if production issues appear. Keep rollout below 100 percent until production web/backend smoke is stable.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="good-callout">
+        <h2>Recommended Next Move</h2>
+        <p>Before any live deployment, make the CI workflow corrections and create the two rollout branches. Then run the validation gates and open PRs. Only after those PRs pass should Supabase and Vercel production be changed.</p>
+      </section>
+
+      <section class="panel">
+        <h2>References Used</h2>
+        <ul>
+          <li>Vercel environment behavior: <a href="https://vercel.com/docs/environment-variables">Vercel Environment Variables</a></li>
+          <li>Vercel preview and production deployments: <a href="https://vercel.com/docs/deployments/custom-environments">Vercel Environments</a> and <a href="https://vercel.com/docs/deployments/git">Deploying Git Repositories with Vercel</a></li>
+          <li>Supabase Edge Function deploy flow: <a href="https://supabase.com/docs/guides/functions/deploy">Deploy to Production</a></li>
+          <li>Supabase Edge Function secrets: <a href="https://supabase.com/docs/guides/functions/secrets">Environment Variables</a></li>
+          <li>Supabase deployment model: <a href="https://supabase.com/docs/guides/deployment">Deployment and Branching</a></li>
+        </ul>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
