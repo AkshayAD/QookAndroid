@@ -83,6 +83,8 @@ git log --oneline origin/main..main   # should be empty or only your new commits
 
 **Recovery backup:** A full repo backup (all files + git history as of 2026-05-23) exists at `D:\Projects\Qook-Android-backup-2026-05-23`. Do not delete it until both remotes are confirmed stable.
 
+**2026-06-12 note:** Security rollout landed on both remotes: QookAndroid `63c9faa`, QookCommander `0ba5791`. Vercel `api/*` files MUST use explicit `.js` extensions on relative ESM imports; extensionless imports crash with `FUNCTION_INVOCATION_FAILED` at runtime. QookCommander deploys cap at 12 serverless functions, so consolidate endpoints rather than adding `api` files; see the `api/account.ts` pattern on the production lineage. `supabase db push` is manual-dispatch only; reconcile `supabase_migrations.schema_migrations` first, using `RECONCILIATION_TRIAGE.md` as the tracker. The `D:/Projects/Cook Commander` workspace is deprecated.
+
 ## Architecture
 
 **Stack:** React 19 + TypeScript + Vite, Tailwind, React Router 7, Supabase (auth + Postgres + RLS), Vercel serverless functions for API, Razorpay for payments, Google Gemini for AI, Capacitor 8 for the Android wrapper (`appId: in.qook.app`).
