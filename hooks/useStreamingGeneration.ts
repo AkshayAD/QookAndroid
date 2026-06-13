@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { WeeklyPlan } from '../types';
-import { getApiBaseUrl } from '../utils/platform';
+import { getApiBaseUrl, isNative } from '../utils/platform';
+import { generatePlanViaProxy } from '../services/aiProxyService';
 
 interface StreamingState {
   isGenerating: boolean;
@@ -90,6 +91,26 @@ export function useStreamingGeneration() {
       });
 
       try {
+        if (isNative()) {
+          const plan = await generatePlanViaProxy(
+            userId,
+            preferences,
+            learningSummary,
+            normalized.familyGroupId,
+            normalized.userApiKey
+          );
+
+          setState((previous) => ({
+            ...previous,
+            isGenerating: false,
+            progress: 100,
+            currentMessage: 'Plan ready',
+            partialPlan: plan,
+          }));
+
+          return plan;
+        }
+
         const response = await fetch(`${getApiBaseUrl()}/api/ai-stream`, {
           method: 'POST',
           headers: await getStreamingHeaders(),

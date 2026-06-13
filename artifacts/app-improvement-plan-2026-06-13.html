@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qook — App Improvement &amp; Payment Hardening Plan (2026-06-13)</title>
+<style>
+  :root{--bg:#0f1117;--card:#181b25;--card2:#1e2230;--text:#e8eaf0;--muted:#9aa3b5;--line:#2a2f40;
+        --p0:#ff4d5e;--p1:#ff9f43;--p2:#ffd95e;--p3:#7ec8ff;--ok:#3ddc97;--accent:#8b7cf6;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:1.9rem;margin:0 0 4px}
+  h2{font-size:1.35rem;margin:48px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+  h3{font-size:1.05rem;margin:24px 0 8px;color:var(--accent)}
+  .sub{color:var(--muted);margin-bottom:24px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:14px 0}
+  .emergency{border:2px solid var(--p0);background:#231419}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:.92rem}
+  th{text-align:left;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:2px solid var(--line)}
+  td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  code{background:#262b3b;padding:1px 6px;border-radius:4px;font-size:.86em;font-family:Consolas,monospace;word-break:break-all}
+  .badge{display:inline-block;font-weight:700;font-size:.74rem;padding:2px 9px;border-radius:10px;color:#0d0f14;white-space:nowrap}
+  .P0{background:var(--p0)} .P1{background:var(--p1)} .P2{background:var(--p2)} .P3{background:var(--p3)} .OK{background:var(--ok)}
+  .score{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:16px 0}
+  .score .card{margin:0}
+  .score b{display:block;font-size:.95rem;margin-bottom:4px}
+  .score span{font-size:.85rem;color:var(--muted)}
+  ul{margin:8px 0;padding-left:22px} li{margin:5px 0}
+  .verdict{border-left:4px solid var(--accent);padding:10px 16px;background:var(--card2);border-radius:0 8px 8px 0;margin:12px 0;font-size:.95rem}
+  .decision{border-left:4px solid var(--p1);padding:10px 16px;background:#241d14;border-radius:0 8px 8px 0;margin:12px 0}
+  .phase{display:flex;gap:14px;margin:10px 0}
+  .phase .num{flex:0 0 44px;height:44px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:1.1rem}
+  .small{font-size:.85rem;color:var(--muted)}
+  a{color:#9db8ff}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>Qook — App Improvement &amp; Payment Hardening Plan</h1>
+<div class="sub">Audit date 2026-06-13 · Production = QookCommander <code>af321c3</code> (www.qook.in) · App lineage = QookAndroid <code>16fde7a</code> · v1.0.12 (versionCode 13)<br>
+Method: 4 parallel deep-audit agents (payment backend ×high-reasoning, payment frontend, Android/Capacitor, general sweep) + every P0 hand-verified against the actual production files and the live site.</div>
+
+<!-- ================= SCORECARD ================= -->
+<h2>Executive Scorecard</h2>
+<div class="score">
+  <div class="card"><b>🔴 Account deletion API</b><span>Unauthenticated on production — anyone with a user ID can delete that account. Verified live.</span></div>
+  <div class="card"><b>🔴 Razorpay backend (prod)</b><span>Not production-safe: client controls the charged amount &amp; granted plan; webhook grants are not idempotent.</span></div>
+  <div class="card"><b>🔴 Android monetization</b><span>App users cannot purchase at all (checkout hard-blocked on native), and the "web checkout" steer risks Play policy.</span></div>
+  <div class="card"><b>🟠 Payment page UX</b><span>No double-click guard, no modal-dismiss recovery, plan badge stale after purchase, fabricated "50% OFF" strikethroughs.</span></div>
+  <div class="card"><b>🟠 Pricing truth</b><span>Docs, UI, and DB disagree on pack contents, referral reward, weekly bonus, and credit expiry.</span></div>
+  <div class="card"><b>🟠 AI cost control</b><span>Several Gemini-spending endpoints have no credit cost or per-user quota — your API bill is exposed.</span></div>
+  <div class="card"><b>🟡 Frontend/UX core</b><span>Solid flows; gaps in failure recovery (SSE parsing, bootstrap cache), modal accessibility, context re-renders.</span></div>
+  <div class="card"><b>🟢 Android platform basics</b><span>targetSdk 36, allowBackup=false, no cleartext, compiled Tailwind bundle — store-compliant foundation.</span></div>
+</div>
+
+<div class="verdict"><b>Bottom line:</b> the payment <i>plumbing</i> (signatures, JWT auth, RLS lockdown from the 2026-06-12 rollout) is in place, but the payment <i>economics</i> are not enforced server-side: the client tells the server what to charge and what to grant. Combined with the unauthenticated delete-account endpoint, production needs an emergency batch <b>before any growth push</b>. The QookAndroid lineage already contains most of the hardened payment code (<code>20260518_payment_hardening.sql</code>, intent-based verification) — the core fix is porting it to production, not inventing it.</div>
+
+<!-- ================= EMERGENCY ================= -->
+<h2>🚨 Emergency Fixes — production, this week</h2>
+
+<div class="card emergency">
+<h3 style="margin-top:0;color:var(--p0)">E1 · Unauthenticated account deletion (LIVE vulnerability)</h3>
+<p><span class="badge P0">P0</span> <code>api/delete-account.ts</code> (prod) has <b>no auth check whatsoever</b>: it reads <code>userId</code> from the request body, uses the service-role key, and even sets <code>Access-Control-Allow-Origin: *</code>. It cancels the victim's Razorpay subscription, soft-deletes their data, and deletes the auth user. Verified live: an anonymous POST reaches the handler (<code>{"error":"Missing userId"}</code>).</p>
+<b>Fix (small, ~20 lines):</b>
+<ul>
+  <li>Add <code>authenticateSupabaseUser(req.headers.authorization)</code> and require <code>authUserId === userId</code> (same pattern already used in <code>create-order.ts:15-21</code>).</li>
+  <li>Drop the wildcard CORS header (use the <code>ALLOWED_ORIGINS</code> approach from <code>lib/serverApi.ts</code>).</li>
+  <li>Note: the QookAndroid lineage version is already JWT-guarded — this was the one endpoint the 2026-06-12 port missed.</li>
+</ul>
+<b>Validate:</b> 401 unauthenticated, 403 cross-user, 200 self (staging user) → browser-smoke preview → promote → re-probe prod.
+</div>
+
+<div class="card emergency">
+<h3 style="margin-top:0;color:var(--p0)">E2 · Client controls charged amount and granted plan</h3>
+<p><span class="badge P0">P0</span> Two halves of the same hole, independently confirmed:</p>
+<ul>
+  <li><code>api/create-order.ts:9,30</code> — charges client-sent <code>amount_inr</code> (and <code>currency</code>); the server never looks up the pack price.</li>
+  <li><code>api/verify-payment.ts:64-73</code> — after signature check, grants whatever client-sent <code>plan_id</code>/<code>type</code> says via <code>verify_razorpay_payment</code> RPC; the RPC (<code>20260328_unified_credit_billing.sql:892+</code>) never compares the paid amount to the pack/plan price.</li>
+  <li>Same pattern on subscriptions: <code>create-subscription.ts</code> trusts client <code>plan_id</code>/<code>total_count</code>/<code>offer_id</code>.</li>
+</ul>
+<p><b>Exploit:</b> pay ₹19 for the Starter pack, call verify with <code>plan_id = mega</code> → 50 credits for ₹19. Signature verification does not prevent this — the signature only proves <i>a</i> payment happened.</p>
+<b>Fix — server-side price binding with payment intents (the Android lineage already implements this pattern):</b>
+<ol>
+  <li>Client sends <b>only</b> <code>pack_id</code> (or internal plan id). Server looks up the active price, hardcodes INR, creates the Razorpay order.</li>
+  <li>Persist an intent row (<code>order_id → user_id, pack_id, amount, status=pending</code>) — the <code>billing_payment_intents</code> table from <code>20260518_payment_hardening.sql</code> (file exists in QookAndroid lineage, <b>not yet applied to live DB</b> — needs the live-vs-repo audit already tracked in RECONCILIATION_TRIAGE).</li>
+  <li><code>verify-payment</code> loads the intent, fetches the payment from the Razorpay API, asserts <code>captured</code> + amount + currency + order match, then grants <b>from the intent</b>, never from client fields.</li>
+</ol>
+</div>
+
+<div class="card emergency">
+<h3 style="margin-top:0;color:var(--p0)">E3 · Webhook can double-grant credits; fails open</h3>
+<ul>
+  <li><span class="badge P0">P0</span> <code>razorpay-webhook.ts:181</code> — <code>subscription.charged</code> grants credits on <b>every delivery</b>; Razorpay retries ⇒ repeated grants. The dedupe table <code>billing_webhook_events</code> already exists in the schema but is never used. Client-side <code>verify-payment</code> grant can also overlap the webhook grant for the same charge.</li>
+  <li><span class="badge P1">P1</span> <code>razorpay-webhook.ts:54</code> — signature verification is <b>skipped if <code>RAZORPAY_WEBHOOK_SECRET</code> is unset</b> → env misconfiguration silently makes billing mutations unauthenticated. Fail closed.</li>
+  <li><span class="badge P1">P1</span> <code>razorpay-webhook.ts:118</code> — processing errors still return HTTP 200, so Razorpay never retries; paid users can silently miss credits. Return 5xx on transient failure (after signature check), or persist the event and process idempotently.</li>
+  <li><span class="badge P2">P2</span> <code>razorpay-webhook.ts:52</code> — HMAC computed over <code>JSON.stringify(req.body)</code> (re-serialized) instead of raw body bytes — valid signatures can fail on serialization differences.</li>
+</ul>
+<b>Fix:</b> dedupe by Razorpay <code>event_id</code> + <code>payment_id</code> into <code>billing_webhook_events</code> before granting; one idempotent ledger shared by verify-payment and webhook (unique constraint on payment_id); raw-body HMAC; fail-closed secret handling.
+</div>
+
+<!-- ================= PAYMENT BACKEND ================= -->
+<h2>1 · Razorpay Backend — remaining findings (prod lineage)</h2>
+<table>
+<tr><th style="width:52px">Sev</th><th style="width:300px">Where</th><th>Issue → Fix</th></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>cancel-subscription.ts:70-88</code></td><td>Razorpay cancel failure is ignored, local status still set to <code>cancelled</code> → user keeps getting charged while app says cancelled. Only mark cancelled after Razorpay confirms; add a <code>cancel_requested</code> state reconciled by webhook.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>razorpay-webhook.ts:326</code> + <code>20260111_subscription_system.sql:41</code></td><td>Webhook writes status <code>halted</code> but no migration in the prod tree widens the status CHECK constraint → the write can error and be swallowed (ack'd 200), leaving delinquent subs active. Verify the live constraint; add a migration covering all Razorpay lifecycle states actually written.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>20260330_…family_pro.sql:44</code></td><td><code>get_credit_summary(p_user_id)</code> is SECURITY DEFINER with arbitrary user id and wasn't covered by the 20260607 execute-revoke → clients can likely read other users' credit summaries. Add <code>auth.uid() = p_user_id</code> guard or revoke + wrap.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>create-subscription.ts:87-93</code></td><td>The DB write storing <code>razorpay_subscription_id</code> ignores errors, and writes to <code>user_subscriptions</code> <i>before</i> payment. Move to the intent table; check write results.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>verify-payment.ts:54</code></td><td>Signature compared with <code>!==</code>, not <code>crypto.timingSafeEqual</code>. Low practical risk, cheap fix — do it in the E2 batch.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>verify-payment.ts:60</code></td><td>Falls back to the <b>anon key</b> if the service-role key is missing — with the RPC now service-role-only, this turns a config error into confusing 500s. Fail loudly instead.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td>billing RPCs (<code>20260328…sql</code>)</td><td>SECURITY DEFINER functions (<code>verify_razorpay_payment</code>, <code>grant_credits</code>, <code>consume_credit</code>) don't pin <code>search_path</code>. Recreate with <code>SET search_path</code> (also clears Supabase advisor warnings).</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>subscriptionService.ts:11</code></td><td>Code selects <code>razorpay_plan_id / razorpay_offer_id / razorpay_upi_offer_id</code> columns that no migration creates (manual UPDATEs only) → schema drift. Add an idempotent migration.</td></tr>
+<tr><td><span class="badge P3">P3</span></td><td>all payment endpoints</td><td><code>details: error.message</code> leaks provider/DB internals to clients. Return stable error codes; log details server-side.</td></tr>
+</table>
+
+<div class="verdict"><b>Agent verdict (high-reasoning audit, confirmed):</b> "The payment backend is not production-safe today for real-money use. Top fixes: server-side price/plan binding with persisted payment intents, one idempotent ledger for client verification + webhooks, and fail-closed webhook/config handling." The 2026-06-12 JWT guards solved <i>who</i> can call — not <i>what</i> they can charge or grant.</div>
+
+<!-- ================= PAYMENT FRONTEND ================= -->
+<h2>2 · Payment Page &amp; Checkout UX</h2>
+<table>
+<tr><th style="width:52px">Sev</th><th style="width:300px">Where</th><th>Issue → Fix</th></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>PricingPage.tsx:21-284</code></td><td><b>No double-click protection</b>: <code>loading</code>/<code>selectedPlan</code> state exists but is never set before launching Razorpay; pack buttons stay enabled mid-order → double orders possible. Disable all paid CTAs while an order is in flight; reset on success/error/dismiss.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>razorpayService.ts:204</code>, <code>PricingContent.tsx:42</code></td><td><b>Modal dismiss unhandled</b>: closing the Razorpay modal fires neither <code>handler</code> nor <code>payment.failed</code> → pricing page stuck in loading with no retry. Add <code>modal:{ ondismiss }</code> with a reset callback.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>PricingContent.tsx:51</code>, <code>SubscriptionContext.tsx:270</code></td><td>After successful payment only <b>credits</b> refresh — the plan badge/settings keep showing the old plan until reload. Add <code>refreshSubscription()</code> to the post-verify path.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>credit_packs.validity_days</code> vs <code>PricingContent.tsx:358</code></td><td>UI promises paid credits "never expire"; backend defaults <code>validity_days = 180</code> and the hardening migration enforces <code>expires_at</code>. <b>Pick a policy</b> (see Decisions) and make UI + DB agree — this is a refund-dispute magnet.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>PricingContent.tsx:397</code></td><td>"50% OFF" strikethrough prices are <b>fabricated</b> (<code>price × 2</code>) regardless of the pack's real <code>discount_pct</code>. Misleading-pricing exposure — render real values or drop strikethroughs.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>PricingContent.tsx:123-127, 285</code></td><td>Plan benefits hardcoded (drift from DB rows); "First Month FREE" + crossed-out price makes the free tier look like a discounted paid sub. Render from plan rows; label trial terms exactly.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>razorpayService.ts:174,239</code></td><td><code>loadScript</code> never asserts <code>window.Razorpay</code> exists, no timeout, possible duplicate script injection. Guard + retryable error.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>PricingContent.tsx:289</code></td><td>No GST inclusive/exclusive wording, no receipt/confirmation copy after payment. Add tax line + post-payment confirmation (and email receipt later).</td></tr>
+<tr><td><span class="badge P3">P3</span></td><td><code>SettingsModal.tsx:425</code></td><td>Cancellation is buried in Settings; pricing page only offers a mailto. Link "Manage plan" from pricing/post-purchase.</td></tr>
+</table>
+
+<!-- ================= PRICING ================= -->
+<h2>3 · Pricing Truth — one source, currently three</h2>
+<div class="card">
+<table>
+<tr><th>Item</th><th>Docs say</th><th>DB/UI say</th><th>Action</th></tr>
+<tr><td>Credit packs</td><td>Starter 8/₹49 · Value 20/₹99 · Bulk 60/₹249</td><td>Starter 3/₹19 · Popular 8/₹49 · Value 20/₹99 · Mega 50/₹199</td><td>DB is live truth → rewrite docs</td></tr>
+<tr><td>Referral reward</td><td>+2 credits</td><td>+3 credits (backend &amp; UI)</td><td>Pick one; update docs/support copy</td></tr>
+<tr><td>Intro prices</td><td>₹49.50 / ₹99.50 / ₹29.50</td><td>₹49 / ₹99 / ₹29 (integers)</td><td>Docs cleanup</td></tr>
+<tr><td>Free weekly bonus</td><td>+1 (Android UI/docs)</td><td>3/week in prod docs &amp; older SQL</td><td>Verify live DB value, align everything</td></tr>
+<tr><td>Family Pro</td><td>absent from pricing docs</td><td>exists in UI + server pricing</td><td>Document it</td></tr>
+<tr><td>Paid credit expiry</td><td>"never expire" (UI)</td><td>180-day <code>validity_days</code></td><td><b>Owner decision</b> — see below</td></tr>
+</table>
+<p class="small">Recommendation: declare the <b>database plan/pack rows the single source of truth</b>, render all UI pricing/benefits from those rows (kills the hardcoded-benefit drift), and regenerate the docs from a query. Server-side price binding (E2) then enforces the same truth at charge time.</p>
+</div>
+
+<!-- ================= ANDROID ================= -->
+<h2>4 · Android App (Capacitor)</h2>
+<table>
+<tr><th style="width:52px">Sev</th><th style="width:300px">Where</th><th>Issue → Fix</th></tr>
+<tr><td><span class="badge P0">P0</span></td><td><code>razorpayService.ts:164</code>, <code>PricingContent.tsx:330</code></td><td><b>Android users cannot pay</b>: <code>isNative()</code> hard-blocks checkout and shows "Web checkout only". Also a Play-policy problem: in-app digital goods must use Play Billing, and steering users to external payment from inside the app violates policy. <b>Owner decision required</b> (see Decisions).</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>capacitor.config.ts:19</code> + <code>/api/ai-stream</code></td><td><code>CapacitorHttp</code> patches <code>fetch</code> and typically buffers responses → SSE meal-generation streaming likely broken/falls back on device. Exempt the SSE path from the patched fetch (or use a streaming-safe client) and <b>device-test</b> <code>/api/ai-stream</code>.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>utils/platform.ts:137</code></td><td>App Links: manifest claims <code>https://qook.in</code> links but the JS handler only routes <code>in.qook.app://auth/callback</code> — join-family invites &amp; referral links open the app then go nowhere. Route all <code>appUrlOpen</code> URLs through React Router (path+query+hash).</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>android/app/build.gradle:83</code></td><td>Firebase Analytics + Messaging bundled but unused → AD_ID permission, FCM receivers, and Play Data-safety obligations for nothing. Remove until actually implemented.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>android/.gitignore:55</code></td><td>Keystore ignore rules are <b>commented out</b> while <code>upload-keystore.jks</code> + <code>keystore.properties</code> sit in the tree → one careless commit leaks the upload key. Un-comment; verify never pushed (rotate if so).</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>AndroidManifest.xml:31</code></td><td>App Link host covers <code>qook.in</code> but not <code>www.qook.in</code> (the canonical host). Add + publish assetlinks for both.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>lib/serverApi.ts:70</code></td><td>CORS allow-list omits <code>capacitor://localhost</code> / <code>https://localhost</code> — currently masked by CapacitorHttp; will break the moment it's disabled (e.g. for the SSE fix). Add native origins now.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>utils/platform.ts:104</code></td><td>Hardware back exits the app from any root-history state (incl. dashboard). Make back route/modal-aware; double-tap-to-exit only at true home.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>capacitor.config.ts:31</code></td><td>Keyboard resize configured 3 ways (manifest adjustResize + Capacitor resize:body + manual body padding) → compounding bottom gaps. Pick one.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>file_paths.xml:3</code> · <code>offlineCache.ts:44</code> · <code>index.tsx:12</code></td><td>FileProvider exposes all external storage (narrow to cache); offline cache isn't wired into startup hydration (wire it or drop the claim); splash hides before first paint (blank flash). </td></tr>
+<tr><td><span class="badge OK">OK</span></td><td>platform basics</td><td>targetSdk 36 (ahead of Play's API-35 requirement), <code>allowBackup=false</code>, cleartext disabled, compiled-Tailwind bundle — verified good.</td></tr>
+</table>
+
+<!-- ================= FRONTEND ================= -->
+<h2>5 · General Frontend / UX</h2>
+<table>
+<tr><th style="width:52px">Sev</th><th style="width:300px">Where</th><th>Issue → Fix</th></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>bootstrapService.ts:30</code></td><td>Bootstrap cache key is <b>not user-scoped</b> → on a shared device, user B can hydrate user A's cached profile/settings if server bootstrap fails. Key the cache by <code>session.user.id</code>; clear on mismatch.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>App.tsx:1512</code></td><td>SSE parser splits on <code>\n</code> with no carry-over buffer → a <code>data:</code> frame split across network chunks is silently dropped (triggers fallback + the double-credit risk in §6). Buffer partial frames.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>Router.tsx:98</code></td><td>No error boundary around lazy routes — a chunk-load failure blanks the app. Wrap routes in an ErrorBoundary with reload action.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>App.tsx:1741</code></td><td>Background grocery-list refresh failures are swallowed (intended toast never fires). Return a typed failure so the caller can show retry.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>AppShell.tsx:355, 209</code></td><td>Systemic modal a11y gaps (no <code>role="dialog"</code>, focus trap, Escape) and hover-only desktop user menu (keyboard/touch can't open it). Build one accessible modal/menu primitive, migrate surfaces.</td></tr>
+<tr><td><span class="badge P3">P3</span></td><td><code>SubscriptionContext.tsx:291</code> (+ other providers)</td><td>Context values recreated every render → broad re-renders. <code>useMemo</code>/<code>useCallback</code> the provider values.</td></tr>
+<tr><td><span class="badge P3">P3</span></td><td><code>App.tsx:415</code></td><td>Idle preload loads ~11 lazy surfaces at once right after dashboard. Stagger by likely-next-action.</td></tr>
+</table>
+
+<!-- ================= BACKEND GENERAL ================= -->
+<h2>6 · General Backend (non-payment)</h2>
+<table>
+<tr><th style="width:52px">Sev</th><th style="width:300px">Where</th><th>Issue → Fix</th></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>ai-proxy.ts:35</code></td><td>Most Gemini actions (grocery gen, smart-edit, regen, alternatives, translation, preference parsing) have <b>no credit cost and no per-user rate limit</b> when using the platform key → unbounded API spend. Apply <code>check_rate_limit</code> + explicit credit cost to every platform-key action.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>ai-stream.ts:590</code></td><td>Stream consumes a credit on success, but a client parse failure triggers the non-stream fallback → <b>second credit consumed</b> for one generation. Add a client <code>requestId</code>; make consumption idempotent per request.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>grocery-vision.ts:126</code></td><td>Bypasses billing entirely — any authenticated user spends platform Gemini money with only a light rate limit, and BYOK eligibility isn't checked. Route through the shared billing/entitlement checks.</td></tr>
+<tr><td><span class="badge P1">P1</span></td><td><code>delete-account.ts:103</code> + <code>20260115_account_deletion.sql:102</code></td><td>(Beyond E1) Deletion is partial: auth-deletion failure doesn't fail the request, and the soft-delete RPC misses scheduled meals, grocery history, settings, referrals, family memberships, etc. Move to a transactional RPC with a complete table inventory + status/retry.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>account.ts:153</code></td><td>Referral apply (usage check → insert → increment → grant) is non-atomic → races can oversubscribe max-uses / leave partial rewards. Single SQL RPC transaction.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>ai-proxy.ts:331, 1104</code></td><td>Provider error messages leaked to clients; user text (special instructions, smart-edit) interpolated into prompts un-delimited. Stable error codes; fence user content as untrusted + post-validate output against allergies/diet.</td></tr>
+<tr><td><span class="badge P2">P2</span></td><td><code>bootstrap.ts:195</code></td><td>User-specific bootstrap response lacks <code>Cache-Control: private, no-store</code>. Add it.</td></tr>
+<tr><td><span class="badge P3">P3</span></td><td><code>supabaseService.ts:697</code></td><td>Family schedule queries filter by <code>family_group_id, date</code> with no supporting index. Add it with the next migration batch.</td></tr>
+</table>
+
+<!-- ================= DECISIONS ================= -->
+<h2>7 · Decisions only you can make</h2>
+<div class="decision"><b>D1 — Android monetization.</b> Options: (a) <b>Google Play Billing</b> — policy-correct, unblocks in-app revenue, costs 15% fee + integration work (recommended if the app is a growth channel); (b) <b>consumption-only app</b> — remove all upgrade/buy CTAs and "go to website" wording from the Android build (cheap, policy-safe, but app users can never convert in-app). Current state (blocked checkout + web steer text) is the worst of both.</div>
+<div class="decision"><b>D2 — Paid credit expiry.</b> UI says "never expire", DB says 180 days. Honoring "never expire" is the trust-preserving choice (set <code>validity_days</code> null for paid packs); if you want expiry, the UI/terms must say so explicitly <i>before</i> more purchases happen.</div>
+<div class="decision"><b>D3 — Cancellation semantics.</b> Today: immediate local "cancelled" + message claiming access until renewal. Decide: cancel-at-period-end (industry default, recommended) vs immediate + proration. The E-batch state machine work implements whichever you pick.</div>
+<div class="decision"><b>D4 — Referral reward</b> (+2 vs +3) and <b>weekly free bonus</b> (1 vs 3) — pick numbers; everything else is mechanical alignment.</div>
+
+<!-- ================= ROADMAP ================= -->
+<h2>8 · Phased Roadmap</h2>
+
+<div class="phase"><div class="num">0</div><div class="card" style="flex:1;margin:0">
+<b>Hotfix — today (≈1h)</b> — <span class="badge P0">P0</span><br>
+E1: JWT-guard <code>delete-account</code> on prod (port the Android-lineage guard). One small PR, full gate: preview → browser-smoke → 401/403 matrix → promote → re-probe prod.
+</div></div>
+
+<div class="phase"><div class="num">1</div><div class="card" style="flex:1;margin:0">
+<b>Payment integrity — this week (2–3 days)</b> — <span class="badge P0">P0</span><br>
+E2 + E3 as one reviewed batch on the prod lineage: server-side price binding, payment-intent table (audited apply of <code>20260518_payment_hardening</code> after the live-vs-repo migration audit), idempotent grant ledger shared with the webhook, fail-closed webhook secret, raw-body HMAC, non-2xx on processing failure, subscription status-constraint migration, <code>get_credit_summary</code> guard, timing-safe compare, drop anon-key fallback. <span class="small">Most code already exists in the QookAndroid lineage — this is a port, matching RECONCILIATION_TRIAGE batches 5–6.</span><br>
+<b>Verify:</b> Vitest payment-route tests ported alongside; Razorpay test-mode end-to-end purchase on preview; tampered-amount and replayed-verify attempts must fail; browser-smoke both gates.
+</div></div>
+
+<div class="phase"><div class="num">2</div><div class="card" style="flex:1;margin:0">
+<b>Checkout UX + pricing truth — next week (2 days)</b> — <span class="badge P1">P1</span><br>
+Double-click guard, <code>ondismiss</code> recovery, <code>refreshSubscription()</code> after purchase, <code>window.Razorpay</code> guard, real discount rendering, plan benefits from DB rows, GST wording, expiry policy per D2, docs regenerated from DB (packs/referral/bonus per D4), cancel discoverability.<br>
+<b>Verify:</b> component tests for the checkout state machine; manual test-mode purchase incl. modal-dismiss + failure paths.
+</div></div>
+
+<div class="phase"><div class="num">3</div><div class="card" style="flex:1;margin:0">
+<b>Cost control + data integrity (2–3 days)</b> — <span class="badge P1">P1</span><br>
+AI quota/credit enforcement on all platform-key actions, idempotent stream/fallback consumption, grocery-vision entitlement, complete transactional account deletion, atomic referral RPC, error-shape cleanup, bootstrap cache scoping + headers, SSE frame buffering, route ErrorBoundary.
+</div></div>
+
+<div class="phase"><div class="num">4</div><div class="card" style="flex:1;margin:0">
+<b>Android release batch (3–5 days, after D1)</b> — <span class="badge P1">P1</span><br>
+Monetization per D1; SSE-safe streaming on device; appUrlOpen deep-link routing (+ www host, assetlinks); strip unused Firebase; keystore gitignore; back-button + keyboard + splash polish; CORS native origins. Then v1.0.13 to Play internal testing.<br>
+<b>Verify:</b> physical-device matrix — login, generation streaming, deep link from WhatsApp invite, (if D1=a) sandbox purchase.
+</div></div>
+
+<div class="phase"><div class="num">5</div><div class="card" style="flex:1;margin:0">
+<b>Polish (ongoing)</b> — <span class="badge P2">P2</span>/<span class="badge P3">P3</span><br>
+Accessible modal/menu primitives, context memoization, preload staggering, family-query index, compiled Tailwind on prod lineage → re-tighten CSP (existing triage item 10).
+</div></div>
+
+<h3>Standing validation gates (every batch)</h3>
+<ul>
+  <li><code>npm test</code> green in the touched lineage; new behavior gets a test first.</li>
+  <li>Vercel preview → <code>node scripts/browser-smoke.mjs &lt;preview&gt;</code> (0 CSP violations / 0 console errors / styled render) — <b>mandatory since the 2026-06-13 incident</b>.</li>
+  <li>Payment changes additionally: Razorpay <b>test-mode</b> end-to-end purchase + tamper/replay attempts on preview.</li>
+  <li>Fast-forward-only promotion (<code>merge-base --is-ancestor</code> check) → re-run browser-smoke + 401 matrix on www.qook.in.</li>
+  <li>DB changes only via audited migrations after <code>schema_migrations</code> reconciliation — never blind <code>db push</code>.</li>
+</ul>
+
+<p class="small" style="margin-top:40px">Generated 2026-06-13 · Sources: 4 parallel audit agents over D:\Projects\qook-prod-rollout (production lineage af321c3) and D:\Projects\Qook-Android (16fde7a); all P0 findings independently re-verified by direct file reads and a safe live probe. Companion docs: RECONCILIATION_TRIAGE.md · DEPLOYMENT_STATUS.md · artifacts/security-rollout-notes-2026-06-12.md</p>
+
+</div></body></html>

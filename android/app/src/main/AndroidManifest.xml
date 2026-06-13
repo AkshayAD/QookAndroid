@@ -29,6 +29,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="qook.in" />
+                <data android:scheme="https" android:host="www.qook.in" />
             </intent-filter>
 
             <!-- Custom URL scheme fallback -->

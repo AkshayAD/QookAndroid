@@ -57,6 +57,33 @@ export default function AppShell({ children, mode = 'public' }: AppShellProps) {
         setIsMobileMenuOpen(false);
     }, [location.pathname]);
 
+    useEffect(() => {
+        const handleNativeBack = (event: Event) => {
+            if (isFamilyModeOpen) {
+                event.preventDefault();
+                setIsFamilyModeOpen(false);
+                return;
+            }
+            if (isSettingsModalOpen) {
+                event.preventDefault();
+                setIsSettingsModalOpen(false);
+                return;
+            }
+            if (isAuthModalOpen) {
+                event.preventDefault();
+                setIsAuthModalOpen(false);
+                return;
+            }
+            if (isMobileMenuOpen) {
+                event.preventDefault();
+                setIsMobileMenuOpen(false);
+            }
+        };
+
+        window.addEventListener('qook:native-back', handleNativeBack);
+        return () => window.removeEventListener('qook:native-back', handleNativeBack);
+    }, [isAuthModalOpen, isFamilyModeOpen, isMobileMenuOpen, isSettingsModalOpen]);
+
     const handleSignOut = async () => {
         setIsMobileMenuOpen(false);
         setIsAuthModalOpen(false);

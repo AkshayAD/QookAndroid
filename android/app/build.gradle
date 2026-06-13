@@ -78,16 +78,7 @@ dependencies {
     implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
     implementation project(':capacitor-android')
     implementation 'com.google.android.gms:play-services-auth:21.3.0'
-    
-    // Firebase BoM - manages Firebase library versions
-    implementation platform('com.google.firebase:firebase-bom:34.8.0')
-    
-    // Firebase Cloud Messaging for push notifications
-    implementation 'com.google.firebase:firebase-messaging'
-    
-    // Firebase Analytics (optional but recommended)
-    implementation 'com.google.firebase:firebase-analytics'
-    
+
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
@@ -131,12 +122,3 @@ afterEvaluate {
 }
 
 apply from: 'capacitor.build.gradle'
-
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
-    }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}

@@ -21,16 +21,12 @@ const config: CapacitorConfig = {
         },
         SplashScreen: {
             launchShowDuration: 2000,
-            launchAutoHide: true,
+            launchAutoHide: false,
             backgroundColor: '#f97316',
             androidScaleType: 'CENTER_CROP',
             showSpinner: false,
             splashFullScreen: false,
             splashImmersive: false  // CHANGED: was true, caused status bar to be hidden/overlaid
-        },
-        Keyboard: {
-            resize: 'body' as any,
-            resizeOnFullScreen: true
         }
     }
 };

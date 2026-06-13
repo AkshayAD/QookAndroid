@@ -1112,6 +1112,111 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
 
   const hasSavedPhone = Boolean(userProfile?.phone?.trim());
 
+  useEffect(() => {
+    const handleNativeBack = (event: Event) => {
+      if (isPhonePromptOpen && !hasSavedPhone) {
+        event.preventDefault();
+        setIsPhonePromptOpen(false);
+        return;
+      }
+      if (isDeleteAccountOpen) {
+        event.preventDefault();
+        setIsDeleteAccountOpen(false);
+        return;
+      }
+      if (isPricingOpen) {
+        event.preventDefault();
+        setIsPricingOpen(false);
+        return;
+      }
+      if (isFeedbackOpen) {
+        event.preventDefault();
+        setIsFeedbackOpen(false);
+        return;
+      }
+      if (shareModalData.isOpen) {
+        event.preventDefault();
+        setShareModalData((previous) => ({ ...previous, isOpen: false }));
+        return;
+      }
+      if (showArchiveModal) {
+        event.preventDefault();
+        setShowArchiveModal(false);
+        return;
+      }
+      if (transferData) {
+        event.preventDefault();
+        setTransferData(null);
+        return;
+      }
+      if (smartEditData) {
+        event.preventDefault();
+        setSmartEditData(null);
+        return;
+      }
+      if (isInventoryCaptureOpen) {
+        event.preventDefault();
+        setIsInventoryCaptureOpen(false);
+        return;
+      }
+      if (isSettingsOpen) {
+        event.preventDefault();
+        setIsSettingsOpen(false);
+        return;
+      }
+      if (isPreferencesOpen) {
+        event.preventDefault();
+        setIsPreferencesOpen(false);
+        return;
+      }
+      if (isLearningSheetOpen) {
+        event.preventDefault();
+        setIsLearningSheetOpen(false);
+        return;
+      }
+      if (isAlternativesSidebarOpen) {
+        event.preventDefault();
+        setIsAlternativesSidebarOpen(false);
+        return;
+      }
+      if (isRecipePanelOpen) {
+        event.preventDefault();
+        setIsRecipePanelOpen(false);
+        return;
+      }
+      if (isSavedRecipesPanelOpen) {
+        event.preventDefault();
+        setIsSavedRecipesPanelOpen(false);
+        return;
+      }
+      if (saveConflict) {
+        event.preventDefault();
+        setSaveConflict(null);
+      }
+    };
+
+    window.addEventListener('qook:native-back', handleNativeBack);
+    return () => window.removeEventListener('qook:native-back', handleNativeBack);
+  }, [
+    hasSavedPhone,
+    isAlternativesSidebarOpen,
+    isDeleteAccountOpen,
+    isFeedbackOpen,
+    isInventoryCaptureOpen,
+    isLearningSheetOpen,
+    isPhonePromptOpen,
+    isPreferencesOpen,
+    isPricingOpen,
+    isRecipePanelOpen,
+    isSavedRecipesPanelOpen,
+    isSettingsOpen,
+    saveConflict,
+    shareModalData.isOpen,
+    showArchiveModal,
+    smartEditData,
+    transferData,
+  ]);
+
   const isByokEnabledForSummary = useCallback((creditSummary: Awaited<ReturnType<typeof getUserCredits>>) => (
     Boolean(
       creditSummary?.byok_enabled &&
@@ -1475,108 +1580,110 @@ function App({ forceOnboarding = false, demoMode = false }: AppProps) {
       // Fetch learning summary from last 3 months of accepted meals
       const learningSummary = await supabaseService.getMealLearningSummary(userId, 3, activeFamilyGroupId);
 
-      // Try streaming first (now with FULL prompt), fallback to regular API
+      // Web uses SSE for progress. Native skips SSE because CapacitorHttp buffers streams.
       let plan: WeeklyPlan | null = null;
 
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
+      if (!isNative()) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
 
-        if (!session?.access_token) {
-          throw new Error('Authentication required. Please sign in again.');
-        }
+          if (!session?.access_token) {
+            throw new Error('Authentication required. Please sign in again.');
+          }
 
-        const response = await fetch(`${getApiBaseUrl()}/api/ai-stream`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({
-            userId,
-            familyGroupId: activeFamilyGroupId ?? null,
-            preferences: prefs,
-            learningSummary,
-            userApiKey: apiKey
-          })
-        });
+          const response = await fetch(`${getApiBaseUrl()}/api/ai-stream`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+              userId,
+              familyGroupId: activeFamilyGroupId ?? null,
+              preferences: prefs,
+              learningSummary,
+              userApiKey: apiKey
+            })
+          });
 
-        if (response.ok && response.body) {
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let fullText = '';
+          if (response.ok && response.body) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let fullText = '';
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split('\n');
+              const chunk = decoder.decode(value, { stream: true });
+              const lines = chunk.split('\n');
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const data = JSON.parse(line.slice(6));
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const data = JSON.parse(line.slice(6));
 
-                  if (data.type === 'progress') {
-                    setStreamingDay(data.day);
-                  } else if (data.type === 'thinking') {
-                    // Show thinking message in UI
-                    setThinkingMessage(data.message);
-                  } else if (data.type === 'chunk') {
-                    fullText += data.text;
-                    // Count and extract days from partial JSON
-                    const dayMatches = fullText.match(/"day"\s*:\s*"[^"]+"/g) || [];
-                    if (dayMatches.length > 0) {
-                      setStreamingDay(Math.min(dayMatches.length, 7));
+                    if (data.type === 'progress') {
+                      setStreamingDay(data.day);
+                    } else if (data.type === 'thinking') {
+                      // Show thinking message in UI
+                      setThinkingMessage(data.message);
+                    } else if (data.type === 'chunk') {
+                      fullText += data.text;
+                      // Count and extract days from partial JSON
+                      const dayMatches = fullText.match(/"day"\s*:\s*"[^"]+"/g) || [];
+                      if (dayMatches.length > 0) {
+                        setStreamingDay(Math.min(dayMatches.length, 7));
 
-                      // Try to parse partial days for real-time display
-                      try {
-                        // Find all complete day objects using regex
-                        const dayBlockRegex = /\{\s*"day"\s*:\s*"[^"]+"\s*,\s*"breakfast"\s*:\s*"[^"]*"\s*,\s*"lunch"\s*:\s*"[^"]*"\s*,\s*"dinner"\s*:\s*"[^"]*"[^}]*\}/g;
-                        const completeDays = fullText.match(dayBlockRegex);
-                        if (completeDays && completeDays.length > 0) {
-                          const parsedDays = completeDays.map(dayStr => {
-                            try {
-                              return JSON.parse(dayStr);
-                            } catch {
-                              return null;
+                        // Try to parse partial days for real-time display
+                        try {
+                          // Find all complete day objects using regex
+                          const dayBlockRegex = /\{\s*"day"\s*:\s*"[^"]+"\s*,\s*"breakfast"\s*:\s*"[^"]*"\s*,\s*"lunch"\s*:\s*"[^"]*"\s*,\s*"dinner"\s*:\s*"[^"]*"[^}]*\}/g;
+                          const completeDays = fullText.match(dayBlockRegex);
+                          if (completeDays && completeDays.length > 0) {
+                            const parsedDays = completeDays.map(dayStr => {
+                              try {
+                                return JSON.parse(dayStr);
+                              } catch {
+                                return null;
+                              }
+                            }).filter(Boolean) as DayPlan[];
+
+                            if (parsedDays.length > 0) {
+                              setPartialDays(
+                                parsedDays.map((day) => normalizeDayForSelectedMeals(day, prefs.mealsToPrepare, prefs.showPrepReminders ?? true))
+                              );
                             }
-                          }).filter(Boolean) as DayPlan[];
-
-                          if (parsedDays.length > 0) {
-                            setPartialDays(
-                              parsedDays.map((day) => normalizeDayForSelectedMeals(day, prefs.mealsToPrepare, prefs.showPrepReminders ?? true))
-                            );
                           }
+                        } catch {
+                          // Ignore parse errors for partial JSON
                         }
-                      } catch {
-                        // Ignore parse errors for partial JSON
                       }
+                    } else if (data.type === 'complete' && data.data) {
+                      plan = normalizeWeeklyPlanForSelectedMeals(
+                        data.data as WeeklyPlan,
+                        prefs.mealsToPrepare,
+                        prefs.showPrepReminders ?? true
+                      );
+                      setStreamingDay(7);
+                      setThinkingMessage('');
+                      setPartialDays([]);
+                    } else if (data.type === 'error') {
+                      throw new Error(data.message);
                     }
-                  } else if (data.type === 'complete' && data.data) {
-                    plan = normalizeWeeklyPlanForSelectedMeals(
-                      data.data as WeeklyPlan,
-                      prefs.mealsToPrepare,
-                      prefs.showPrepReminders ?? true
-                    );
-                    setStreamingDay(7);
-                    setThinkingMessage('');
-                    setPartialDays([]);
-                  } else if (data.type === 'error') {
-                    throw new Error(data.message);
+                  } catch (parseErr) {
+                    // Ignore parse errors for partial data
                   }
-                } catch (parseErr) {
-                  // Ignore parse errors for partial data
                 }
               }
             }
           }
+        } catch (streamError) {
+          console.log('Streaming failed, falling back to regular API', streamError);
         }
-      } catch (streamError) {
-        console.log('Streaming failed, falling back to regular API', streamError);
       }
 
-      // Fallback to high-quality API if streaming didn't work
+      // Fallback to high-quality API if web streaming didn't work. Native reaches this without an SSE call.
       if (!plan) {
         plan = normalizeWeeklyPlanForSelectedMeals(
           await generatePlanViaProxy(userId, prefs, learningSummary, activeFamilyGroupId, apiKey),

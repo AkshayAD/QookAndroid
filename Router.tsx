@@ -1,8 +1,8 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
 import { AdminRoute } from './components/AdminRoute';
-import { isNative } from './utils/platform';
+import { hideNativeSplashScreen, isNative } from './utils/platform';
 
 const App = lazy(() => import('./App'));
 const AppShell = lazy(() => import('./components/AppShell'));
@@ -27,6 +27,8 @@ function RouteLoader({ message = 'Loading...' }: { message?: string }) {
 
 // Component to capture referral code from URL
 function ReferralCapture({ children }: { children: React.ReactNode }) {
+    const location = useLocation();
+
     useEffect(() => {
         // Capture referral code from URL on app load
         const params = new URLSearchParams(window.location.search);
@@ -38,10 +40,12 @@ function ReferralCapture({ children }: { children: React.ReactNode }) {
             console.log('Referral code captured:', refCode.toUpperCase());
 
             // Clean the URL to remove the ref parameter (optional, for cleaner UX)
-            const cleanUrl = window.location.pathname + window.location.hash;
+            params.delete('ref');
+            const cleanQuery = params.toString();
+            const cleanUrl = window.location.pathname + (cleanQuery ? `?${cleanQuery}` : '') + window.location.hash;
             window.history.replaceState({}, '', cleanUrl);
         }
-    }, []);
+    }, [location.pathname, location.search, location.hash]);
 
     return <>{children}</>;
 }
@@ -93,6 +97,27 @@ function PublicRoute({ children, redirectIfAuth = true }: { children: React.Reac
 // Main Router Component
 export default function AppRouter() {
     const useNativeAuthLanding = isNative();
+    const { loading } = useAuth();
+
+    useEffect(() => {
+        if (!useNativeAuthLanding || loading) {
+            return;
+        }
+
+        let secondFrame = 0;
+        const firstFrame = window.requestAnimationFrame(() => {
+            secondFrame = window.requestAnimationFrame(() => {
+                void hideNativeSplashScreen();
+            });
+        });
+
+        return () => {
+            window.cancelAnimationFrame(firstFrame);
+            if (secondFrame) {
+                window.cancelAnimationFrame(secondFrame);
+            }
+        };
+    }, [loading, useNativeAuthLanding]);
 
     return (
         <BrowserRouter>
