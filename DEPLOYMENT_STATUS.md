@@ -11,7 +11,8 @@
 
 | Task | Status | Details |
 |------|--------|---------|
-| Production deploy | Complete | `www.qook.in` serves QookCommander `main` commit `af321c3` (CSP hotfix, 2026-06-13, `dpl_5wMDnESDV33jqa2eK6V3BWFfjQ2k`+follow-up). |
+| Production deploy | Complete | `www.qook.in` serves QookCommander `main` commit `4403e42` (2026-06-13 payment+hardening releases, browser-smoke + API-matrix verified). |
+| Payment hardening | Complete | 2026-06-13: server-side price binding + payment intents, idempotency, delete-account auth, cancel-at-period-end, no-expiry credits, webhook fail-closed/dedupe, AI rate limiting, complete account deletion, atomic referral. Commits `58e3c2d`+`4403e42`. Live DB migrations applied+verified. |
 | Security rollout | Complete | 2026-06-12 rollout completed across GitHub, Vercel, and Supabase. See `artifacts/security-rollout-notes-2026-06-12.md`. |
 | Supabase migration | Complete | Migration `20260607120000` applied. |
 | Recipe search | Complete | `recipe-search` v26 deployed. |

@@ -45,7 +45,7 @@ Status date: 2026-06-12
 
 Live DB history now records `20260523`, `20260524090000`, `20260524090100`, `20260607120000`, plus timestamped duplicate `20260612162607`.
 
-`20260518_payment_hardening` is not applied live: `billing_payment_intents` and `billing_payment_events` are absent, and search-path hardening is absent. Run a live-vs-repo audit before any `supabase db push`.
+`billing_payment_events` exists live (it always did — the 2026-06-12 note conflated it with intents). `billing_payment_intents` was ABSENT and is now CREATED live by the 2026-06-13 payment hardening (prod-lineage migrations `20260613010000`/`010100`/`010200` + `020000`/`020100`, applied via reviewed MCP `apply_migration`, each verified by a rollback test). Billing-RPC `search_path` pinning + `get_credit_summary`/`consume_credit`/`get_user_credits_summary` lockdown are also applied. The old `20260518_payment_hardening.sql` file is superseded. Still run a live-vs-repo audit before any blanket `supabase db push`.
 
 Many older migration filenames use 8-digit prefixes that do not match the 14-digit history versions. `supabase db push` stays manual-dispatch only until `supabase_migrations.schema_migrations` is reconciled.
 
