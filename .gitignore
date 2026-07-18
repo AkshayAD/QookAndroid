@@ -66,3 +66,8 @@ CLEANUP_PLAN.md
 # (run git filter-repo separately if history rewrite is ever needed)
 QookCommander Marketing/
 supabase/.temp/
+
+# Service-account keys (never commit)
+secrets/
+*.serviceaccount.json
+play-service-account.json
